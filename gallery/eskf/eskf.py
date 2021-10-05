@@ -1,7 +1,6 @@
 '''
 An error state Kalman filter with IMU, UWB and flowdeck measurements
 '''
-
 #!/usr/bin/env python3
 import argparse
 import os, sys

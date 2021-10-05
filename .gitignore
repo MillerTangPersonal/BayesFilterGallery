@@ -4,3 +4,5 @@
 ros_ws/build/
 
 ros_ws/devel/
+
+*.json
