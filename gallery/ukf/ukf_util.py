@@ -1,14 +1,11 @@
 '''
-plotting functions
+some helpling functions for the UKF
 '''
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import norm
-import matplotlib.mlab as mlab
+from numpy.linalg import inv
 import math
+import matplotlib.pyplot as plt
 import matplotlib
-
 FONTSIZE = 18;   TICK_SIZE = 16
 
 # set window background to white
@@ -17,6 +14,74 @@ plt.rcParams['figure.facecolor'] = 'w'
 matplotlib.rc('xtick', labelsize=TICK_SIZE) 
 matplotlib.rc('ytick', labelsize=TICK_SIZE) 
 
+def isin(t_np,t_k):
+    # check if t_k is in the numpy array t_np. If t_k is in t_np, return the index and bool = Ture.
+    # else return 0 and bool = False
+    if t_k in t_np:
+        res = np.where(t_np == t_k)
+        b = True
+        return res[0][0], b
+    b = False
+    return 0, b
+
+def cross(v):    # input: 3x1 vector, output: 3x3 matrix
+    vx = np.array([
+        [ 0,    -v[2], v[1]],
+        [ v[2],  0,   -v[0]],
+        [-v[1],  v[0], 0 ] 
+    ])
+    return vx
+
+def denormalize(scl, norm_data):
+    # @param: scl: the saved scaler   norm_data: 
+    norm_data = norm_data.reshape(-1,1)
+    new = scl.inverse_transform(norm_data)
+    return new
+
+
+def getSigmaP(X, L, kappa, dim):
+    # get sigma points
+    # return sigma_points, the num of sigma points
+    X = X.reshape(-1,1)
+    w = np.zeros((dim,1))
+    mu = np.concatenate((X, w), axis=0)
+    L_num = mu.shape[0]
+    Z_SP= mu
+
+    for idx in range(L_num):
+        # i=idx: 1,...,L 
+        z_i  = mu + math.sqrt(L_num + kappa) * L[:, idx].reshape(-1,1)
+        z_iL = mu - math.sqrt(L_num + kappa) * L[:, idx].reshape(-1,1)
+        Z_SP = np.hstack((Z_SP, z_i))
+        Z_SP = np.hstack((Z_SP, z_iL))
+        
+    # Z_SP = [z_0; z_1, z_(1+L), ..., z_i, z_(i+L)]
+    return Z_SP, Z_SP.shape[1], L_num
+
+def getAlpha(idx,L_num,kappa):
+    if idx == 0:
+        alpha = kappa/(L_num + kappa)
+    else:
+        alpha = 1/(2*(L_num + kappa))
+    return alpha
+
+def wrapToPi(err_th):
+    # wrap the theta error to [-pi, pi]
+    # wrap a scalar angle error
+    while err_th < -math.pi:
+        err_th += 2 * math.pi
+    while err_th > math.pi:
+        err_th -= 2 * math.pi
+    return err_th
+
+def wrapToPi_vector(err_th):
+    # wrap a vector angle error
+    # wrap to [-pi, pi]
+    err_th = (err_th + np.pi) % (2 * np.pi) - np.pi
+    return err_th
+
+
+# help functions for visualization
 def plot_pos(t,Xpo,t_vicon,pos_vicon):
     fig = plt.figure(facecolor="white",figsize=(10, 8))
     ax = fig.add_subplot(311)
@@ -105,4 +170,41 @@ def plot_traj(pos_vicon, Xpo, anchor_pos):
     ax_t.set_box_aspect((1, 1, 0.5))  # xy aspect ratio is 1:1, but change z axis
     plt.title(r"Trajectory of the experiment", fontsize=FONTSIZE, fontweight=0, color='black', style='italic', y=1.02 )
     
+def plot_2d(t,Xpo,Ppo,vicon):
+    # plot function for 2D problem
+    # There is a small problem: Ppo have some small values e-05   
+    # a wrap around
+    Ppo[:,0,0] = np.clip(Ppo[:,0,0], 0, 1)
+    Ppo[:,1,1] = np.clip(Ppo[:,1,1], 0, 1)
+    Ppo[:,2,2] = np.clip(Ppo[:,2,2], 0, 1)
+    
+    fig = plt.figure(facecolor="white")
+    ax = fig.add_subplot(311)
+    # ax.plot(t, vicon[:,0], color='orangered',linewidth=1.9,alpha=2.0)
+    ax.plot(t,vicon[:,0] - Xpo[0,:], color='steelblue',linewidth=1.9, alpha=0.8)
+    ax.plot(t,  3*np.sqrt(Ppo[:,0,0]), color='red',linestyle='dashed',linewidth=1.0, alpha=0.8)
+    ax.plot(t, -3*np.sqrt(Ppo[:,0,0]), color='red',linestyle='dashed',linewidth=1.0, alpha=0.8)
+    ax.set_ylabel(r'e_x [m]',fontsize=15)
+    # plt.legend(['Vicon ground truth','Estimate'])
+    plt.title(r"Estimation results", fontsize=18,  color='black')
+    
+    bx = fig.add_subplot(312)
+    # bx.plot(t, vicon[:,1], color='orangered',linewidth=1.9,alpha=2.0)
+    bx.plot(t, vicon[:,1] - Xpo[1,:], color='steelblue',linewidth=1.9, alpha=0.8)
+    bx.plot(t,  3*np.sqrt(Ppo[:,1,1]), color='red',linestyle='dashed',linewidth=1.0, alpha=0.8)
+    bx.plot(t, -3*np.sqrt(Ppo[:,1,1]), color='red',linestyle='dashed',linewidth=1.0, alpha=0.8)
+    bx.set_ylabel(r'e_y [m]',fontsize=15)
+    
+    ## wrap to pi function not working well 
+    cx = fig.add_subplot(313)
+    # cx.plot(t, vicon[:,2], color='orangered',linewidth=1.9,alpha=2.0)
+    cx.plot(t, wrapToPi_vector(vicon[:,2] - Xpo[2,:]), color='steelblue',linewidth=1.9, alpha=0.8)
+    cx.plot(t,  3*np.sqrt(Ppo[:,2,2]), color='red',linestyle='dashed',linewidth=1.0, alpha=0.8)
+    cx.plot(t, -3*np.sqrt(Ppo[:,2,2]), color='red',linestyle='dashed',linewidth=1.0, alpha=0.8)
+    cx.set_xlabel(r'time [s]')
+    cx.set_ylabel(r'e_th [rad]',fontsize=15)
 
+    fig1 = plt.figure(facecolor="white")
+    dx = fig1.add_subplot(111)
+    dx.plot(Xpo[0,:], Xpo[1,:], color='orangered',linewidth=1.0,alpha=1.0)
+    dx.plot(vicon[:,0], vicon[:,1], color='steelblue',linewidth=1.0,alpha=1.0)

@@ -1,5 +1,5 @@
 '''
-An error state Kalman filter with IMU, UWB and flowdeck measurements
+An error state Kalman filter with IMU, UWB, and flowdeck measurements
 '''
 #!/usr/bin/env python3
 import argparse
@@ -19,8 +19,6 @@ from sklearn.metrics import mean_squared_error
 from eskf_util import isin, cross, zeta, computeG_grad
 from plot_util import plot_pos, plot_pos_err, plot_traj
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', action='store', nargs=2)
@@ -33,7 +31,7 @@ if __name__ == "__main__":
     anchor_position = anchor_survey['an_pos']
     # print out
     anchor_file = os.path.split(sys.argv[-2])[1]
-    print("selecting anchor constellation " + str(anchor_file) + "\n")
+    print("\n selecting anchor constellation " + str(anchor_file) + "\n")
 
     # access rosbag file
     ros_bag = args.i[1]
@@ -86,7 +84,7 @@ if __name__ == "__main__":
     w_accxyz = 2.0;      w_gyro_rpy = 0.1    # rad/sec
     w_vel = 0;           w_pos = 0;          w_att = 0;        
     # Constants
-    GRAVITY_MAGNITUE = 9.81
+    GRAVITY_MAGNITUDE = 9.81
     DEG_TO_RAD  = math.pi/180.0
     e3 = np.array([0, 0, 1]).reshape(-1,1)     
 
@@ -138,7 +136,7 @@ if __name__ == "__main__":
 
     # ----------------------- MAIN EKF LOOP ---------------------#
     print('timestep: %f' % len(t))
-    print('Start state estimation')
+    print('\nStart state estimation')
     for k in range(len(t)-1):                 # k = 0 ~ N-1
         k=k+1                                 # k = 1 ~ N
         # Find what measurements are available at the current time (help function: isin() )
@@ -165,14 +163,14 @@ if __name__ == "__main__":
             omega[k] = omega_k
             Vpo = Xpo[k-1,3:6]
             # Acc: G --> m/s^2
-            f_k = imu[imu_k,0:3] * GRAVITY_MAGNITUE
+            f_k = imu[imu_k,0:3] * GRAVITY_MAGNITUDE
             f[k] = f_k
             dw = omega_k * dt                      # Attitude error
             # nominal state motion model
             # position prediction 
-            Xpr[k,0:3] = Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUE*e3) * dt**2
+            Xpr[k,0:3] = Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
             # velocity prediction
-            Xpr[k,3:6] = Xpo[k-1, 3:6] + np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUE*e3) * dt
+            Xpr[k,3:6] = Xpo[k-1, 3:6] + np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
             # if CF is on the ground
             if Xpr[k, 2] < 0:  
                 Xpr[k, 2:6] = np.zeros((1,4))    
@@ -207,9 +205,9 @@ if __name__ == "__main__":
             # nominal state motion model
             # position prediction 
             Vpo = Xpo[k-1,3:6]
-            Xpr[k,0:3] = Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUE*e3) * dt**2
+            Xpr[k,0:3] = Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
             # velocity prediction
-            Xpr[k,3:6] = Xpo[k-1, 3:6] + np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUE*e3) * dt
+            Xpr[k,3:6] = Xpo[k-1, 3:6] + np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
             # if CF is on the ground
             # if Xpr[k, 2] < 0:  
             #     Xpr[k, 2:6] = np.zeros((1,4))    
