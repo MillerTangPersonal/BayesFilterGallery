@@ -8,10 +8,9 @@ from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import matplotlib.style as style
 # import help functions
-from ukf_util import getSigmaP, getAlpha, wrapToPi
-from plot_util import plot_2d
+from ukf_util import getSigmaP, getAlpha, wrapToPi, plot_2d
+
 # select the matplotlib plotting style
-style.use('ggplot')
 np.set_printoptions(precision=3)
 os.chdir("/home/wenda/BayesFilterGallery/gallery/ukf")   
 curr = os.getcwd()
@@ -49,12 +48,13 @@ Q = np.diag([v_var[0,0], om_var[0,0]]);   R = np.diag([r_var[0,0], b_var[0,0]])
 state_num = 3;                  input_dim = 2        
 kappa = 5
 # Set Max range
-r_max = 10
+r_max = 0
 
 for i in range(r_meas.shape[0]):
     for j in range(r_meas.shape[1]):
         if r_meas[i,j] > r_max:
             r_meas[i,j] = 0.0
+
 # ----------------------- MAIN UKF LOOP ----------------------- #
 print('Start UKF State Estimation!!!')
 for k in range(K-1):

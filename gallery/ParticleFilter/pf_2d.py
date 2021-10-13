@@ -12,8 +12,7 @@ import matplotlib.style as style
 # import help functions
 from pf_util import wrapToPi,wrapToPi_vector
 from pf_plot_util import plot_2d
-# select the matplotlib plotting style
-style.use('ggplot')
+
 # fix random seed
 seed(30)
 np.set_printoptions(precision=3)
