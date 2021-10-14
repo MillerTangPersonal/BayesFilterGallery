@@ -1,4 +1,5 @@
 ''' sliding window filter for a 2D estimation'''
+from matplotlib import colors
 import numpy as np
 import math
 import string, os
@@ -18,6 +19,7 @@ np.set_printoptions(precision=5)
 # motion_model
 # propgate the state and noise
 def motion_model(x, T, v, om):
+    x = np.squeeze(x)
     A = np.array([[T * math.cos(x[2]), 0],
                   [T * math.sin(x[2]), 0],
                   [0                 , T]])
@@ -28,18 +30,23 @@ def motion_model(x, T, v, om):
 
 def nv_propagation(x, T, v_var, om_var):
     # provide the invert directly
+    x = np.squeeze(x)
     # input sensor noise
     Q_var = np.diag([v_var[0,0], om_var[0,0]]); 
     A = np.array([[T * math.cos(x[2]), 0],
                   [T * math.sin(x[2]), 0],
                   [0                 , T]])
 
-    Q_prop = A.dot(Q_var).dot(A.T)
+    Q_prop = A.dot(Q_var).dot(A.T) + 1e-10*np.eye(3)          # why I need this?
+
+
+    # test
+    Q_prop = np.diag([0.0044, 0.0044, 0.0082])     # ????
     Q_inv = np.linalg.inv(Q_prop)
     return Q_inv
 
 # meas. model
-def meas_model(x, l_xy):
+def meas_model(x, l_xy, d):
     # x = [x_k, y_k, theta_k]
     # l_xy = [x_l, y_l]
     x_m = l_xy[0]-x[0]-d*math.cos(x[2])
@@ -47,7 +54,9 @@ def meas_model(x, l_xy):
 
     r_m = np.sqrt( x_m**2 + y_m**2 )
     phi_m = np.arctan2(y_m, x_m) - x[2]
-
+    
+    # safety code: wrap to PI
+    phi_m = wrapToPi(phi_m)
     meas = np.array([r_m, phi_m])
     return meas.reshape(-1,1)
 
@@ -70,7 +79,7 @@ def compute_G(x_op, l_xy, d):
 
     g21 = l_xy[1] - x_op[1] - d*math.sin(x_op[2])
     g22 = - (l_xy[0] - x_op[0] - d*math.cos(x_op[2]))
-    g23 = d**2 - d*math.cos(x_op[2])*(l_xy[0] - x_op[0]) - d*math.sin(x_op[1] - x_op[1])
+    g23 = d**2 - d*math.cos(x_op[2])*(l_xy[0] - x_op[0]) - d*math.sin(x_op[2])*(l_xy[1] - x_op[1])
 
     G = np.array([[g11/D1, g12/D1, g13/D1],
                   [g21/D2, g22/D2, g23/D2 -1]])
@@ -78,8 +87,11 @@ def compute_G(x_op, l_xy, d):
     return np.squeeze(G)
 
 
-def construct_A_b(x, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var, v_wd, om_wd):
+# W_inv is very large
 
+def construct_A_b(x_op, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var, v_wd, om_wd, d):
+    # decode x_op: from vector to matrix
+    x_op = x_op.reshape(-1,3).T             # consider a better way for this convertion
     # input x is a 3 x w_len numpy array
     R_inv = np.diag([1.0/r_var[0,0], 1.0/b_var[0,0]])
 
@@ -89,89 +101,71 @@ def construct_A_b(x, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var, v_wd, om_
     W_v_inv = np.empty((0,0));  W_y_inv = np.empty((0,0))
 
     # construct H matrix
-    H_U = np.eye(3*(w_len+1))      # the uppper matrix has a fixed dimension
+    H_U = np.eye(3*(w_len+1))       # the uppper matrix has a fixed dimension
     H_L = np.empty((0,0))           # the lower matrix doesn't have a fixed dimension. It depends on how many measurements we get during this window size
 
-    e_0_v = x[:,0].reshape(-1,1) - x_w1.reshape(-1,1)
-    W_inv = nv_propagation(x_w1, T, v_var, om_var)
+    e_0_v = x_op[:,0].reshape(-1,1) - x_w1.reshape(-1,1)
+    W_0_inv = nv_propagation(x_w1, T, v_var, om_var)
 
     e_v = np.append(e_v, np.squeeze(e_0_v))
     # save W_pro
-    W_v_inv = block_diag(W_v_inv, W_inv)
-    # # construct H_U
-    # H_U[3:6, 0:3] = -1*compute_F(x[:,0], T, v_wd[0], om_wd[0])
-
-
-    # the landmark idx 
-    l_idx = np.nonzero(r_meas[w1,:]);   l_idx = np.squeeze(np.asarray(l_idx))
-
-    R_num = np.count_nonzero(r_meas[w1,:],axis=0)
-    # iterate over all the meas. at init time
-    # stack to e_y
-    G = np.empty((0,3))    # empty G to contain all the Gs in timestep k
-    for i in range(R_num):  
-        l_xy = l[l_idx[i], :]             # the r_idx th landmark pos.
-        r_land = r_meas[w1, l_idx[i]]     # [timestamp, id of landmark]
-        b_land = b_meas[w1, l_idx[i]]
-        y_w1 = np.array([r_land, b_land]).reshape(-1,1)
-
-        e_0_y = y_w1 - meas_model(x[:,0], l_xy)    
-        # compute angle error, wrap to pi
-        e_0_y[1] = wrapToPi(e_0_y[1])
-        e_y = np.append(e_y, np.squeeze(e_0_y))
-        # --------- save the variance of meas. ------------ #
-        W_y_inv = block_diag(W_y_inv, R_inv)
-        # compute G
-        G_i = compute_G(x[:,0], l_xy, d)
-        G = np.concatenate((G,G_i), axis=0)
-        
-    H_L = block_diag(H_L,G)
+    W_v_inv = block_diag(W_v_inv, W_0_inv)
 
     # ------------------- loop over the window size ------------------------#
-    for idx in range(w_len):
-        idx = idx + 1
+    for idx in range(w_len):    # 0,1,2
+        idx = idx + 1           # 1,2,3
         # ------------ get the error and noise variance in motion --------- #
         # propagate input noise through motion model
-        W_inv = nv_propagation(x[:,idx-1], T, v_var, om_var)
-        x_pro = motion_model(x[:,idx-1], T, v_wd[idx], om_wd[idx])
+        W_inv = nv_propagation(x_op[:,idx-1], T, v_var, om_var)
+        x_pro_idx = motion_model(x_op[:,idx-1], T, v_wd[idx], om_wd[idx])    # x_pro: 1, 2, 3
 
         # get the error in motion (wrap the angle error to Pi)
-        e_idx_v = x_pro- x[:, idx-1].reshape(-1,1);  e_idx_v[2] = wrapToPi(e_idx_v[2])
-        
+        e_idx_v = x_pro_idx- x_op[:, idx].reshape(-1,1);  e_idx_v[2] = wrapToPi(e_idx_v[2])
         # append the motion error
         e_v = np.append(e_v, np.squeeze(e_idx_v))
+
         # save W_pro
         W_v_inv = block_diag(W_v_inv, W_inv)
+
         # --------------- construct H_U matrix ------------------------ #
-        H_U[(3*idx):(3+3*idx), (3*idx):(3+3*idx)] = -1*compute_F(x[:,idx-1], T, v_wd[idx], om_wd[idx])
+        H_U[(3*idx):(3+3*idx), (3*idx-3):(3*idx)] = -1*compute_F(x_op[:,idx-1], T, v_wd[idx], om_wd[idx])  # get F_{0,1,2}
 
-        # ----------------- get the error in measurements ----------------- #
-        l_idx = np.nonzero(r_meas[w1+idx,:]);    l_idx = np.squeeze(np.asarray(l_idx))
-
-        R_num = np.count_nonzero(r_meas[w1+idx,:],axis=0)
     
-    for idx in range(w_len):
-        idx = idx + 1
-        # iterate over all the meas. at timestamp w1+idx
-        # stack to e_y
-        G = np.empty((0,3))    # empty G to contain all the Gs in timestep k
-        for j in range(R_num): 
-            l_xy = l[l_idx[j], :]             # the r_idx th landmark pos.
-            r_l = r_meas[w1+idx, l_idx[j]]     # [timestamp, id of landmark]
-            b_l = b_meas[w1+idx, l_idx[j]]
-            y = np.array([r_l, b_l]).reshape(-1,1)
-            e_idx_y = y - meas_model(x[:,idx-1], l_xy)
-            # compute angle error, wrap to pi
-            e_idx_y[1] = wrapToPi(e_idx_y[1])
-            e_y = np.append(e_y, np.squeeze(e_idx_y))
+    for k in range(w_len+1):    # 0,1,2,3
+        # ----------------- get the error in measurements ----------------- #
+        l_k = np.nonzero(r_meas[w1+k,:]);    l_k = np.asarray(l_k).reshape(-1,1)
 
-            # --------- save the variance of meas. ------------ #
-            W_y_inv = block_diag(W_y_inv, R_inv)
-            # compute G
-            G_i = compute_G(x[:,idx-1], l_xy, d)
-            G = np.concatenate((G,G_i), axis=0)
+        M = np.count_nonzero(r_meas[w1+k,:],axis=0)        # at timestamp k, we have M meas. in total
 
-        H_L = block_diag(H_L,G)
+        # check if we have meas. or not
+        # print(M)
+        if M: 
+            G = np.empty((0,3))                                # empty G to contain all the Gs in timestep k
+            for m in range(M): 
+                l_xy = l[l_k[m,0], :]                            # the m-th landmark pos.
+                r_l = r_meas[w1+k, l_k[m,0]]                     # [timestamp, id of landmark]
+                b_l = b_meas[w1+k, l_k[m,0]]
+                y = np.array([r_l, b_l]).reshape(-1,1)
+                e_k_y = y - meas_model(x_op[:,k], l_xy, d)
+                # compute angle error, wrap to pi
+                e_k_y[1] = wrapToPi(e_k_y[1])
+                e_y = np.append(e_y, np.squeeze(e_k_y))
+
+                # --------- save the variance of meas. ------------ #
+                W_y_inv = block_diag(W_y_inv, R_inv)
+                # compute G
+                G_i = compute_G(x_op[:,k], l_xy, d)
+                G = np.concatenate((G,G_i), axis=0)
+
+            H_L = block_diag(H_L,G)
+            
+        else:
+            # when no measurements, append dummy G, e_y, and W_y_inv
+            G = np.zeros((1,3))    
+            H_L = block_diag(H_L,G)
+            e_k_y=np.array(0)
+            e_y = np.append(e_y, np.squeeze(e_k_y))
+            W_y_inv = block_diag(W_y_inv, 0)
 
     e_v = e_v.reshape(-1,1);  e_y = e_y.reshape(-1,1)
 
@@ -209,7 +203,7 @@ if __name__ == "__main__":
     vicon_gt = np.concatenate([x_true, y_true], axis=1)
     vicon_gt = np.concatenate([vicon_gt, th_true], axis=1)
     K = t.shape[0]
-    T = 0.1
+    T = 0.1                  # 10 Hz
 
     # -------------------- initial Position ---------------------- #
     X0 = np.zeros(3)
@@ -233,51 +227,87 @@ if __name__ == "__main__":
             if r_meas[i,j] > r_max:
                 r_meas[i,j] = 0.0
 
-    # test code
-    w1 = 600;               w2 = 602; 
-    t_wd = t[w1:w2, :]
+    # Sliding window
+    x_est = np.zeros((3,1250))
 
-    # measurement
-    r_wd = r_meas[w1:w2, :]; b_wd = b_meas[w1:w2, :]
-    # input
-    v_wd  = v[w1:w2+1, :];     om_wd = om[w1:w2+1, :]
-    # ground truth
-    x_wd_true = np.concatenate((x_true[w1:w2,:], y_true[w1:w2,:], th_true[w1:w2,:]), axis=1).T
+    for sw in range(1):
+        print(sw)
+        w1 = sw;               w2 = sw+50; 
+        t_wd = t[w1:w2+1, :]
+        # prior from previous estimate
+        x_w1 = np.array([x_true[w1], y_true[w1], th_true[w1]])
+        # measurement
+        r_wd = r_meas[w1:w2+1, :]; b_wd = b_meas[w1:w2+1, :]
+        # input
+        v_wd  = v[w1:w2+1, :];     om_wd = om[w1:w2+1, :]
+        # ground truth
+        x_wd_true = np.concatenate((x_true[w1:w2+1,:], y_true[w1:w2+1,:], th_true[w1:w2+1,:]), axis=1).T
 
-    # prior from previous
-    x_w1 = np.array([x_true[w1], y_true[w1], th_true[w1]])
-    # dead reckon for operating point
-    w_len = w2 - w1
+        # dead reckon for operating point
+        w_len = w2 - w1
+        # column vector x_op = [x_op[0]; x_op[1]; x_op[2];]
+        x_op = np.zeros((3*(w_len +1),1))         # 602-600 = 2 => we have x_op[0], x_op[1], x_op[2]
+        x_op[0:3] = x_w1.reshape(-1,1)            # gt for state at t_w1
 
-    x_op = np.zeros((3, w_len))
-    x_op[:,0] = np.squeeze(x_w1)            # gt for state at t_w1
+        # dead reckoning 
+        for idx in range(w_len):      # 0 ~ (w_len) 
+            idx = idx + 1             # 1 ~ w_len+1 
+            x_pro = motion_model(x_op[3*idx-3: 3*idx], T, v_wd[idx], om_wd[idx])
+            x_op[3*idx: 3*idx+3] = x_pro.reshape(-1,1)
 
-    # dead reckoning 
-    for idx in range(w_len-1):    # 0 ~ (w_len-1) 
-        idx = idx + 1             # 1 ~ w_len 
-        x_pro = motion_model(x_op[:,idx-1], T, v_wd[idx], om_wd[idx])
-        x_op[:,idx] = np.squeeze(x_pro)
+        x_dr = x_op
+        # Gauss-Newton 
+        iter = 0;      delta_p = 1;    max_iter = 10; 
 
+        while (iter < max_iter) and (delta_p > 0.0001):
+            iter = iter + 1; 
+            print("\nIteration {0}\n".format(iter))
+            A, b = construct_A_b(x_op, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var, v_wd, om_wd, d)
+            # For Ax=b, we can write a RTS smoother to solve it or using the numpy.linalg.solve (based on LU decomposition) to solve for x.
+            dx = np.linalg.solve(A, b)
 
-    # construct error vector
-    # e_v, e_y, W_v, W_y = get_ex_W(x_op, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var)
+            # update the operating point
+            x_op = x_op + dx
 
-    A, b = construct_A_b(x_op, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var, v_wd, om_wd)
+            # check for convergence
+            err_x = dx.reshape(-1,3).T        # consider a better way
+            error = 0
+            for i in range(err_x.shape[1]):
+                error = error + np.sqrt(err_x[0,i]**2 + err_x[1,i]**2)
 
+            delta_p = error
+        
+        # print(delta_p)
+        x_est = x_op.reshape(-1,3).T
 
-    dx = np.linalg.solve(A, b)
-    print(dx)
-    # J = 0.5 * ex.T.dot(np.linalg.inv(W)).dot(ex)
+    x_dr = x_dr.reshape(-1,3).T
 
-    # construct the H matrix
+    plt.plot(x_est[0,:], x_est[1,:],'blue')
+    plt.plot(x_true[0:49,0], y_true[0:49,0],'r')
+    plt.plot(x_dr[0,:], x_dr[1,:],'green')
+    plt.xlim([-2, 10])
+    plt.ylim([-3, 4])
+    plt.show()
 
-    # after have the Ax=b, we can write a RTS smoother to solve it or using the numpy.linalg.solve (based on LU decomposition) to solve for x.
+    #     x_w1 = x_op[3:6,0]
+    #     x_est[:,sw] = x_op[0:3,0]
 
-    # debug
-    # plt.plot(x_wd_true[0,:], x_wd_true[1,:], label='gt')
-    # plt.plot(x_op[0,:], x_op[1,:],label='dr')
-    # plt.xlim([-2, 15])
-    # plt.ylim([-4, 4])
-    # plt.legend()
+    # x_est = x_op.reshape(-1,3).T
+
+    # # plt.plot(x_wd_true[:,0], x_wd_true[:,1])
+    # plt.plot(x_est[0,:], x_est[1,:])
+    # plt.plot(x_true[0:49,0], y_true[0:49,0])
+    # plt.xlim([-2, 10])
+    # plt.ylim([-3, 4])
     # plt.show()
+
+    # gt = np.zeros_like(x_op)
+    # for i in range(x_wd_true.shape[1]):
+    #     gt[3*i:3*i+3] = x_wd_true[:,i].reshape(-1,1)
+
+    # test = np.concatenate((x_op, gt), axis=1)
+    # print(test)
+
+
+
 
