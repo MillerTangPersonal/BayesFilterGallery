@@ -100,7 +100,9 @@ if __name__ == "__main__":
     # Create a compound vector t with a sorted merge of all the sensor time bases
     time = np.sort(np.concatenate((t_imu, t_uwb)))
     t = np.unique(time)
+
     K=t.shape[0]
+
     # Initial states/inputs
     f_k = np.zeros((3,1))       # Initial accelerometer input
     f = np.zeros((K, 3))
@@ -135,10 +137,10 @@ if __name__ == "__main__":
     Ppr[0] = P0;                Ppo[0] = P0
 
     # ----------------------- MAIN EKF LOOP ---------------------#
-    print('timestep: %f' % len(t))
+    print('timestep: %f' % K)
     print('\nStart state estimation')
-    for k in range(len(t)-1):                 # k = 0 ~ N-1
-        k=k+1                                 # k = 1 ~ N
+
+    for k in range(1, K):                # k = 1~N-1
         # Find what measurements are available at the current time (help function: isin() )
         imu_k,  imu_check  = isin(t_imu,   t[k-1])
         uwb_k,  uwb_check  = isin(t_uwb,   t[k-1])
@@ -193,6 +195,7 @@ if __name__ == "__main__":
             Ppr[k] = Fx.dot(Ppo[k-1]).dot(Fx.T) + Fi.dot(Qi).dot(Fi.T) 
             # Enforce symmetry
             Ppr[k] = 0.5*(Ppr[k] + Ppr[k].T)   
+
         else:
             # if we don't have IMU data
             Ppr[k] = Ppo[k-1] + Fi.dot(Qi).dot(Fi.T)
@@ -205,9 +208,9 @@ if __name__ == "__main__":
             # nominal state motion model
             # position prediction 
             Vpo = Xpo[k-1,3:6]
-            Xpr[k,0:3] = Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
+            Xpr[k,0:3] = Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(R.dot(f[k].reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
             # velocity prediction
-            Xpr[k,3:6] = Xpo[k-1, 3:6] + np.squeeze(R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
+            Xpr[k,3:6] = Xpo[k-1, 3:6] + np.squeeze(R.dot(f[k].reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
             # if CF is on the ground
             # if Xpr[k, 2] < 0:  
             #     Xpr[k, 2:6] = np.zeros((1,4))    
@@ -271,6 +274,8 @@ if __name__ == "__main__":
                 Xpo[k] = Xpr[k]
                 Ppo[k] = Ppr[k]
                 # keep the previous quaterion  q_list[k]
+
+
 
     print('Finish the state estimation\n')
 

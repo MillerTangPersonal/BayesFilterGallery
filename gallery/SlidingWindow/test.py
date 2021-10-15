@@ -9,7 +9,6 @@ import numpy.matlib
 
 
 block = np.array([[1,2,3],[2,3,4],[3,4,5]])
-
-
-Test = np.eye(3)
-print(Test)
+t = 10 
+for k in range(1,t):
+    print(k)
