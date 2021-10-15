@@ -37,8 +37,8 @@ def nv_propagation(x, T, v_var, om_var):
                   [T * math.sin(x[2]), 0],
                   [0                 , T]])
 
-    Q_prop = A.dot(Q_var).dot(A.T) + 1e-10*np.eye(3)          # why I need this?
-
+    # this noise propagation is not correct. why?
+    # Q_prop = A.dot(Q_var).dot(A.T) + 1e-10*np.eye(3)          
 
     # test
     Q_prop = np.diag([0.0044, 0.0044, 0.0082])     # ????
@@ -233,6 +233,9 @@ if __name__ == "__main__":
     for sw in range(1):
         print(sw)
         w1 = sw;               w2 = sw+50; 
+
+        w1 = 500;               w2 = 800; 
+
         t_wd = t[w1:w2+1, :]
         # prior from previous estimate
         x_w1 = np.array([x_true[w1], y_true[w1], th_true[w1]])
@@ -255,13 +258,14 @@ if __name__ == "__main__":
             x_pro = motion_model(x_op[3*idx-3: 3*idx], T, v_wd[idx], om_wd[idx])
             x_op[3*idx: 3*idx+3] = x_pro.reshape(-1,1)
 
-        x_dr = x_op
+        # x_dr = x_op
+
         # Gauss-Newton 
         iter = 0;      delta_p = 1;    max_iter = 10; 
 
         while (iter < max_iter) and (delta_p > 0.0001):
             iter = iter + 1; 
-            print("\nIteration {0}\n".format(iter))
+            # print("\nIteration {0}\n".format(iter))
             A, b = construct_A_b(x_op, x_w1, w1, w_len, r_meas, b_meas, l, r_var, b_var, v_wd, om_wd, d)
             # For Ax=b, we can write a RTS smoother to solve it or using the numpy.linalg.solve (based on LU decomposition) to solve for x.
             dx = np.linalg.solve(A, b)
@@ -275,38 +279,27 @@ if __name__ == "__main__":
             for i in range(err_x.shape[1]):
                 error = error + np.sqrt(err_x[0,i]**2 + err_x[1,i]**2)
 
-            delta_p = error
+            delta_p = error/(w_len+1)
         
         # print(delta_p)
-        x_est = x_op.reshape(-1,3).T
 
-    x_dr = x_dr.reshape(-1,3).T
+        # save the est. at timestep sw
+        x_est_sw = x_op.reshape(-1,3).T
+
+        # x_est[:, sw] = x_est_sw[:,0]
+
+        x_est = x_est_sw
+
+    # x_dr = x_dr.reshape(-1,3).T
 
     plt.plot(x_est[0,:], x_est[1,:],'blue')
-    plt.plot(x_true[0:49,0], y_true[0:49,0],'r')
-    plt.plot(x_dr[0,:], x_dr[1,:],'green')
+    plt.plot(x_true[500:799,0], y_true[500:799,0],'r')
+    # plt.plot(x_dr[0,:], x_dr[1,:],'green')
     plt.xlim([-2, 10])
     plt.ylim([-3, 4])
     plt.show()
 
-    #     x_w1 = x_op[3:6,0]
-    #     x_est[:,sw] = x_op[0:3,0]
 
-    # x_est = x_op.reshape(-1,3).T
-
-    # # plt.plot(x_wd_true[:,0], x_wd_true[:,1])
-    # plt.plot(x_est[0,:], x_est[1,:])
-    # plt.plot(x_true[0:49,0], y_true[0:49,0])
-    # plt.xlim([-2, 10])
-    # plt.ylim([-3, 4])
-    # plt.show()
-
-    # gt = np.zeros_like(x_op)
-    # for i in range(x_wd_true.shape[1]):
-    #     gt[3*i:3*i+3] = x_wd_true[:,i].reshape(-1,1)
-
-    # test = np.concatenate((x_op, gt), axis=1)
-    # print(test)
 
 
 
