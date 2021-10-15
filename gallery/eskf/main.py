@@ -16,10 +16,21 @@ from pyquaternion import Quaternion
 from scipy import interpolate            
 from sklearn.metrics import mean_squared_error
 
-from eskf_util import isin
+from eskf_class import ESKF
 from plot_util import plot_pos, plot_pos_err, plot_traj
 
-from eskf_class import ESKF
+'''help function for timestamp'''
+def isin(t_np,t_k):
+    # check if t_k is in the numpy array t_np. 
+    # If t_k is in t_np, return the index and bool = Ture.
+    # else return 0 and bool = False
+    if t_k in t_np:
+        res = np.where(t_np == t_k)
+        b = True
+        return res[0][0], b
+    b = False
+    return 0, b
+
 
 if __name__ == "__main__":
     # load data
