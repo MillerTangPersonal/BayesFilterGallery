@@ -234,7 +234,7 @@ if __name__ == "__main__":
         print(sw)
         w1 = sw;               w2 = sw+50; 
 
-        w1 = 500;               w2 = 800; 
+        w1 = 500;               w2 = 600; 
 
         t_wd = t[w1:w2+1, :]
         # prior from previous estimate
