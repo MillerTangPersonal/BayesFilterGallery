@@ -14,10 +14,9 @@ class RTS_Smoother_2D:
         # we use GN to compute dx and update to the operating points until convergence  
         self.dXpr_f = np.zeros((K, 3))
         self.dXpo_f = np.zeros((K, 3))
-        self.dXpo = np.zeros((K, 3))
-
-        self.Ppr = np.zeros((K, 3, 3))
-        self.Ppo = np.zeros((K, 3, 3))
+        self.dXpo   = np.zeros((K, 3))
+        self.Ppr    = np.zeros((K, 3, 3))
+        self.Ppo    = np.zeros((K, 3, 3))
 
         # self.dXpr_f = np.zeros((1,3))  # initial state error is set to be zero.  
 
@@ -64,7 +63,8 @@ class RTS_Smoother_2D:
         phi_m = np.arctan2(y_m, x_m) - x[2]    # in radian
         
         # safety code: wrap to PI
-        phi_m = wrapToPi(phi_m)
+        # phi_m = wrapToPi(phi_m)
+        
         meas = np.array([r_m, phi_m])
         return meas.reshape(-1,1)
 
@@ -81,7 +81,7 @@ class RTS_Smoother_2D:
     def compute_G(self, x_op, l_xy, d):
         # x_op = [x, y, theta] = x_op(k)
         # denominator 1
-        D1 = np.sqrt( (l_xy[0] - x_op[0] - d*math.cos(x_op[2]))**2 + (l_xy[1] - x_op[1] - d*math.sin(x_op[2]))**2 )
+        D1 = math.sqrt( (l_xy[0] - x_op[0] - d*math.cos(x_op[2]))**2 + (l_xy[1] - x_op[1] - d*math.sin(x_op[2]))**2 )
         # denominator 2
         D2 = ( l_xy[0]-x_op[0]-d*math.cos(x_op[2]) )**2 + ( l_xy[1]-x_op[1]-d*math.sin(x_op[2]) )**2
 

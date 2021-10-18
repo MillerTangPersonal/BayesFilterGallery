@@ -34,8 +34,8 @@ if __name__ == "__main__":
 
     # select a small amount of data for debugging
     w1 = 0; w2 = 12609   # 12609
-    t = t[w1 : w2];                t = t - t[0,0]          #reset timestamp
-    v = v[w1 : w2];                om = om[w1 : w2]
+    t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
+    v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
     vicon_gt = vicon_gt[w1 : w2,:]
 
