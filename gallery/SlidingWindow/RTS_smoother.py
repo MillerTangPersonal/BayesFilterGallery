@@ -71,6 +71,7 @@ class RTS_Smoother_2D:
     '''compute motion model Jacobian'''
     def compute_F(self, x_op, dt, v):
         # for F_k-1, x_op = x_op(k-1)
+        # v = v[k]
         F = np.array([[1, 0, -dt * math.sin(x_op[2]) * v],
                       [0, 1,  dt * math.cos(x_op[2]) * v],
                       [0, 0,  1]],dtype=float)
@@ -191,15 +192,10 @@ class RTS_Smoother_2D:
             xk_hat = self.dXpo[k,:].reshape(-1,1)
 
         dx = xk_hat - self.dXpr_f[k,:].reshape(-1,1)
-
-        # print("\n")
-        # print("dXpo(k):", self.dXpo[k,:])
-        # print("dXpr_f(k): ", self.dXpr_f[k,:])
-        # print("\n")
-        # print("[dx_2: {0}, backward k: {1}]".format(dx[2,0],k))
         dx[2,0] = wrapToPi(dx[2,0])
 
         PAP = self.Ppo[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr[k,:,:])).dot(dx)
+
         dx_hat = self.dXpo_f[k-1,:].reshape(-1,1) + PAP
         self.dXpo[k-1,:] = np.squeeze(dx_hat)
 
