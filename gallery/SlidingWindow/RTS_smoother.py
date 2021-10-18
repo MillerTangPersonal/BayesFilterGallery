@@ -73,7 +73,7 @@ class RTS_Smoother_2D:
         return F
 
     '''compute meas. model Jacobian'''
-    def compute_G(x_op, l_xy, d):
+    def compute_G(self, x_op, l_xy, d):
         # x_op = [x, y, theta]
         # denominator 1
         D1 = np.sqrt( (l_xy[0] - x_op[0] - d*math.cos(x_op[2]))**2 + (l_xy[1] - x_op[1] - d*math.sin(x_op[2]))**2 )
@@ -105,7 +105,7 @@ class RTS_Smoother_2D:
         # compute ev_k
         ev_k = self.compute_ev_k(x_op_k1, x_op_k, v_k, om_k, dt)
         # compute F_k-1
-        F_k1 = self.compute_F(x_op_k1, dt, v_k, om_k)
+        F_k1 = self.compute_F(x_op_k1, dt, v_k)
 
         # save motion Jacobian
         self.F[k-1,:,:] = F_k1
@@ -148,7 +148,7 @@ class RTS_Smoother_2D:
             # equ. 1
             self.Ppr[k,:,:] = F_k1.dot(self.Ppr[k-1,:,:]).dot(F_k1.T) + Wv_k
             # equ. 2
-            dx_check = F_k1.dot(self.dXpo_f[k,:].reshape(-1,1)) + ev_k
+            dx_check = F_k1.dot(self.dXpo_f[k-1,:].reshape(-1,1)) + ev_k
             self.dXpr_f[k,:] = np.squeeze(dx_check)
             # equ. 3
             GM = G.dot(self.Ppr[k,:,:]).dot(G.T) + W_y
@@ -162,7 +162,7 @@ class RTS_Smoother_2D:
             # equ. 1
             self.Ppr[k,:,:] = F_k1.dot(self.Ppr[k-1,:,:]).dot(F_k1.T) + Wv_k
             # equ. 2
-            dx_check = F_k1.dot(self.dXpo_f[k,:].reshape(-1,1)) + ev_k
+            dx_check = F_k1.dot(self.dXpo_f[k-1,:].reshape(-1,1)) + ev_k
             self.dXpr_f[k,:] = np.squeeze(dx_check)
             # no meas. to update
             self.Ppo[k,:,:] = self.Ppr[k,:,:]
@@ -171,7 +171,8 @@ class RTS_Smoother_2D:
 
     '''backward pass'''
     def backward(self, k):
-        if k == self.Kmax:
+        if k == self.Kmax -1:   # the last idx is K-1
+            self.dXpo[k,:] = self.dXpo_f[k,:]
             xk_hat = self.dXpo_f[k,:].reshape(-1,1)
         else:
             xk_hat = self.dXpo[k,:].reshape(-1,1)

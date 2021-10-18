@@ -10,7 +10,6 @@ from RTS_smoother import RTS_Smoother_2D
 
 np.set_printoptions(precision=5)
 
-
 if __name__ == "__main__":
     # load data
     os.chdir("/home/wenda/BayesFilterGallery/gallery")   
@@ -31,9 +30,15 @@ if __name__ == "__main__":
     y_true = loadmat(curr+'/dataset2.mat')['y_true']
     th_true = loadmat(curr+'/dataset2.mat')['th_true']
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
+
+    # select a small amount of data for debugging
+    t = t[600:1000];                t = t - t[0,0]          #reset timestamp
+    v = v[600:1000];                om = om[600:1000]
+    r_meas = r_meas[600:1000, :];      b_meas = b_meas[600:1000, :]
+    vicon_gt = vicon_gt[600:1000,:]
+
     # total timestamp
     K = t.shape[0];        T = 0.1  # time duration, 10 Hz
-
     # initial position 
     X0 = vicon_gt[0,:]
     # initial covariance
@@ -53,31 +58,30 @@ if __name__ == "__main__":
 
     # compute the operating point initially
     # compute operating points
-    x_op = np.zeros((3*K, 1))    # column vector
-    x_op[0:3] = X0.reshape(-1,1)
+    x_dr = np.zeros((3*K, 1))    # column vector
+    x_dr[0:3] = X0.reshape(-1,1)
     for k in range(1, K):     # k = 1 : K-1 
         # compute operating point x_op (dead reckoning)
-        x_op[3*k : 3*k+3] = smoother.motion_model(x_op[3*k-3 : 3*k], T, v[k], om[k])
-
+        x_dr[3*k : 3*k+3] = smoother.motion_model(x_dr[3*k-3 : 3*k], T, v[k], om[k])
 
     # Gauss-Newton 
     # in each iteration, 
     # (1) do one batch estimation for dx 
     # (2) update the operating point x_op
     # (3) check the convergence
-
     iter = 0;      delta_p = 1;    max_iter = 10; 
+
+    x_op = np.copy(x_dr)
     while (iter < max_iter) and (delta_p > 0.0001):
         iter = iter + 1; 
         error = 0
+        print("\nIteration: #{0}\n".format(iter))
         # full batch estimation
-
         # RTS smoother forward pass
-        for k in range(1, K):     # k = 1 : K-1 
+        for k in range(1, K):     # k = 1 ~ K-1 
             # operting point 
-            x_op_k1 = x_op[3*k-3, 3*k]
+            x_op_k1 = x_op[3*k-3 : 3*k]
             x_op_k = x_op[3*k : 3*k+3]
-
             # measurements at timestamp k
             r_k = r_meas[k,:]
             b_k = b_meas[k,:]
@@ -86,14 +90,28 @@ if __name__ == "__main__":
             smoother.forward(x_op_k1, x_op_k, v[k], om[k], r_k, b_k, T, k)
 
         # RTS smoother backward pass
-        for k in range(K,-1,1):
+        for k in range(K-1, 0, -1):   # k = K-1 ~ 1
             smoother.backward(k)
 
         # after forward and backward pass
         # update x_op_k one by one
-        for i in range(k):
-            x_op[3*k : 3*k+3] = x_op[3*k : 3*k+3] + smoother.dXpo[k,:].reshape(-1,1)
+        for k in range(K):
+            x_new = x_op[3*k : 3*k+3] + smoother.dXpo[k,:].reshape(-1,1)
+            x_op[3*k : 3*k+3] = x_new
             # update delta x error (only check to x, y)
-            error = error + np.sqrt(smoother.dXpo[k,0]**2 + smoother.dXpo[k,1]**2)
+            error = error + np.sqrt(smoother.dXpo[k,0]**2 + smoother.dXpo[k,1]**2 + smoother.dXpo[k,2]**2)
 
-        delta_p = error / (K + 1)
+        delta_p = error / (K+1)
+        print(delta_p)
+
+    
+
+    ## visual ground truth
+    VISUAL_DR = True
+    if VISUAL_DR:
+        x_dr_v = x_dr.reshape(-1,3)
+        x_op_v = x_op.reshape(-1,3)
+        plt.plot(vicon_gt[:,0], vicon_gt[:,1], color='red')
+        plt.plot(x_dr_v[:,0], x_dr_v[:,1], color = 'blue')
+        plt.plot(x_op_v[:,0], x_op_v[:,1], color = 'green')
+        plt.show()
