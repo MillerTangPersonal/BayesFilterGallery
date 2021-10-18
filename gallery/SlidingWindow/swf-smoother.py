@@ -33,7 +33,7 @@ if __name__ == "__main__":
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
 
     # select a small amount of data for debugging
-    w1 = 0; w2 = 12609
+    w1 = 0; w2 = 12609   # 12609
     t = t[w1 : w2];                t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # meas. noise
     R = np.diag([r_var[0,0], b_var[0,0]])
     # filter the measurements
-    r_max = 10
+    r_max = 1                                          
     for i in range(r_meas.shape[0]):
         for j in range(r_meas.shape[1]):
             if r_meas[i,j] > r_max:
@@ -71,11 +71,11 @@ if __name__ == "__main__":
     # (1) do one batch estimation for dx 
     # (2) update the operating point x_op
     # (3) check the convergence
-    iter = 0;      delta_p = 1;    max_iter = 30; 
+    iter = 0;      delta_p = 1;    max_iter = 10; 
 
     x_op = np.copy(x_dr)
 
-    while (iter < max_iter) and (delta_p > 0.006):
+    while (iter < max_iter) and (delta_p > 0.001):
         iter = iter + 1; 
         error = 0
         print("\nIteration: #{0}\n".format(iter))
@@ -113,9 +113,16 @@ if __name__ == "__main__":
     x_error = x_op_v[:,0] - vicon_gt[:,0]
     y_error = x_op_v[:,1] - vicon_gt[:,1]
     th_error = np.zeros(K)
+    sigma_x = np.zeros([K,1])
+    sigma_y = np.zeros([K,1])
+    sigma_th = np.zeros([K,1])
     for k in range(K):
         th_error[k] = x_op_v[k,2] - vicon_gt[k,2] 
         th_error[k] = wrapToPi(th_error[k])
+        # extract the covariance matrix
+        sigma_x[k,0] = np.sqrt(smoother.Ppo[k,0,0])
+        sigma_y[k,0] = np.sqrt(smoother.Ppo[k,1,1])
+        sigma_th[k,0] = np.sqrt(smoother.Ppo[k,2,2])
 
     ## visual ground truth
     fig1 = plt.figure(facecolor="white")
@@ -125,11 +132,19 @@ if __name__ == "__main__":
     fig2 = plt.figure(facecolor="white")
     ax = fig2.add_subplot(311)
     ax.plot(t, x_error, color='royalblue',linewidth=2.0, alpha=1.0)
-    plt.ylim(-0.3,0.3)
+    ax.plot(t, -3*sigma_x[:,0], '--', color='red')
+    ax.plot(t,  3*sigma_x[:,0], '--', color='red')
+    # plt.ylim(-0.3,0.3)
+
     bx = fig2.add_subplot(312)
     bx.plot(t, y_error, color='royalblue',linewidth=2.0, alpha=1.0)
-    plt.ylim(-0.3,0.3)
+    bx.plot(t, -3*sigma_y[:,0], '--', color='red')
+    bx.plot(t, 3*sigma_y[:,0], '--', color='red')
+    # plt.ylim(-0.3,0.3)
+
     cx = fig2.add_subplot(313)
     cx.plot(t, th_error, color='royalblue',linewidth=2.0, alpha=1.0)
-    plt.ylim(-0.3,0.3)
+    cx.plot(t, -3*sigma_th[:,0], '--', color='red')
+    cx.plot(t,  3*sigma_th[:,0], '--', color='red')
+    # plt.ylim(-0.3,0.3)
     plt.show()

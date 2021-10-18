@@ -45,8 +45,10 @@ def wrapToPi(err_th):
     # wrap a scalar angle error
     while err_th < -math.pi:
         err_th += 2 * math.pi
+
     while err_th > math.pi:
         err_th -= 2 * math.pi
+        
     return err_th
 
 def wrapToPi_vector(err_th):

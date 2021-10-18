@@ -152,6 +152,8 @@ class RTS_Smoother_2D:
             self.Ppr[k,:,:] = F_k1.dot(self.Ppo[k-1,:,:]).dot(F_k1.T) + Wv_k
             # equ. 2
             dx_check = F_k1.dot(self.dXpo_f[k-1,:].reshape(-1,1)) + ev_k
+            # wrap to pi
+            dx_check[2,0] = wrapToPi(dx_check[2,0])    # dx_check[2,0] is delta th
             self.dXpr_f[k,:] = np.squeeze(dx_check)
             # equ. 3
             GM = G.dot(self.Ppr[k,:,:]).dot(G.T) + W_y
@@ -161,12 +163,17 @@ class RTS_Smoother_2D:
             # equ. 5
             in_err = ey_k.reshape(-1,1) - G.dot(self.dXpr_f[k,:].reshape(-1,1))   # innovation error
             dx_hat = self.dXpr_f[k,:].reshape(-1,1) + K_k.dot(in_err)
+            # wrap to pi
+            dx_hat[2,0] = wrapToPi(dx_hat[2,0])    # dx_hat[2,0] is delta th
             self.dXpo_f[k,:] = np.squeeze(dx_hat)
+
         else:
             # equ. 1
             self.Ppr[k,:,:] = F_k1.dot(self.Ppo[k-1,:,:]).dot(F_k1.T) + Wv_k
             # equ. 2
             dx_check = F_k1.dot(self.dXpo_f[k-1,:].reshape(-1,1)) + ev_k
+            # wrap to pi
+            dx_check[2,0] = wrapToPi(dx_check[2,0])    # dx_check[2,0] is delta th
             self.dXpr_f[k,:] = np.squeeze(dx_check)
             # no meas. to update
             self.Ppo[k,:,:] = self.Ppr[k,:,:]
@@ -176,15 +183,23 @@ class RTS_Smoother_2D:
     '''backward pass'''
     def backward(self, k):
         if k == self.Kmax -1:   # the last idx is K-1
+            # initialize
             self.dXpo[k,:] = self.dXpo_f[k,:]
             xk_hat = self.dXpo_f[k,:].reshape(-1,1)
         else:
+            # dXpo[k,:] computed from last iteration
             xk_hat = self.dXpo[k,:].reshape(-1,1)
 
         dx = xk_hat - self.dXpr_f[k,:].reshape(-1,1)
+
+        # print("\n")
+        # print("dXpo(k):", self.dXpo[k,:])
+        # print("dXpr_f(k): ", self.dXpr_f[k,:])
+        # print("\n")
+        # print("[dx_2: {0}, backward k: {1}]".format(dx[2,0],k))
         dx[2,0] = wrapToPi(dx[2,0])
 
-        PAP = self.Ppo[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr[k-1,:,:])).dot(dx)
+        PAP = self.Ppo[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr[k,:,:])).dot(dx)
         dx_hat = self.dXpo_f[k-1,:].reshape(-1,1) + PAP
         self.dXpo[k-1,:] = np.squeeze(dx_hat)
 
