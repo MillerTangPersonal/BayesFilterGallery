@@ -156,7 +156,8 @@ class RTS_Smoother_2D:
             # equ. 4
             self.Ppo[k,:,:] = (np.eye(3) - K_k.dot(G)).dot(self.Ppr[k,:,:])
             # equ. 5
-            dx_hat = self.dXpr_f[k,:].reshape(-1,1) + K_k.dot(ey_k.reshape(-1,1) - G.dot(self.dXpr_f[k,:].reshape(-1,1)))
+            in_err = ey_k.reshape(-1,1) - G.dot(self.dXpr_f[k,:].reshape(-1,1))   # innovation error
+            dx_hat = self.dXpr_f[k,:].reshape(-1,1) + K_k.dot(in_err)
             self.dXpo_f[k,:] = np.squeeze(dx_hat)
         else:
             # equ. 1
@@ -177,7 +178,10 @@ class RTS_Smoother_2D:
         else:
             xk_hat = self.dXpo[k,:].reshape(-1,1)
 
-        PAP = self.Ppo[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr[k-1,:,:])).dot(xk_hat - self.dXpr_f[k,:].reshape(-1,1))
+        dx = xk_hat - self.dXpr_f[k,:].reshape(-1,1)
+        dx[2,0] = wrapToPi(dx[2,0])
+
+        PAP = self.Ppo[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr[k-1,:,:])).dot(dx)
         dx_hat = self.dXpo_f[k-1,:].reshape(-1,1) + PAP
         self.dXpo[k-1,:] = np.squeeze(dx_hat)
 

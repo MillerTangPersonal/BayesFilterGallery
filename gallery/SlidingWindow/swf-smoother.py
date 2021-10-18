@@ -1,4 +1,5 @@
 ''' sliding window filter for a 2D estimation using RTS smoother'''
+from util import wrapToPi
 import numpy as np
 import string, os
 from scipy.io import loadmat
@@ -32,10 +33,10 @@ if __name__ == "__main__":
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
 
     # select a small amount of data for debugging
-    t = t[600:1000];                t = t - t[0,0]          #reset timestamp
-    v = v[600:1000];                om = om[600:1000]
-    r_meas = r_meas[600:1000, :];      b_meas = b_meas[600:1000, :]
-    vicon_gt = vicon_gt[600:1000,:]
+    # t = t[600:1000];                t = t - t[0,0]          #reset timestamp
+    # v = v[600:1000];                om = om[600:1000]
+    # r_meas = r_meas[600:1000, :];      b_meas = b_meas[600:1000, :]
+    # vicon_gt = vicon_gt[600:1000,:]
 
     # total timestamp
     K = t.shape[0];        T = 0.1  # time duration, 10 Hz
@@ -104,14 +105,27 @@ if __name__ == "__main__":
         delta_p = error / (K+1)
         print(delta_p)
 
-    
+    # compute error
+    x_dr_v = x_dr.reshape(-1,3)
+    x_op_v = x_op.reshape(-1,3)
+    x_error = x_op_v[:,0] - vicon_gt[:,0]
+    y_error = x_op_v[:,1] - vicon_gt[:,1]
+    th_error = np.zeros(K)
+    for k in range(K):
+        th_error[k] = x_op_v[k,2] - vicon_gt[k,2] 
+        th_error[k] = wrapToPi(th_error[k])
 
     ## visual ground truth
-    VISUAL_DR = True
-    if VISUAL_DR:
-        x_dr_v = x_dr.reshape(-1,3)
-        x_op_v = x_op.reshape(-1,3)
-        plt.plot(vicon_gt[:,0], vicon_gt[:,1], color='red')
-        plt.plot(x_dr_v[:,0], x_dr_v[:,1], color = 'blue')
-        plt.plot(x_op_v[:,0], x_op_v[:,1], color = 'green')
-        plt.show()
+    fig1 = plt.figure(facecolor="white")
+    plt.plot(vicon_gt[:,0], vicon_gt[:,1], color='red')
+    plt.plot(x_dr_v[:,0], x_dr_v[:,1], color = 'blue')
+    plt.plot(x_op_v[:,0], x_op_v[:,1], color = 'green')
+
+    fig2 = plt.figure(facecolor="white")
+    ax = fig2.add_subplot(311)
+    ax.plot(t, x_error, color='royalblue',linewidth=2.0, alpha=1.0)
+    bx = fig2.add_subplot(312)
+    bx.plot(t, y_error, color='royalblue',linewidth=2.0, alpha=1.0)
+    cx = fig2.add_subplot(313)
+    cx.plot(t, th_error, color='royalblue',linewidth=2.0, alpha=1.0)
+    plt.show()
