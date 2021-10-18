@@ -19,6 +19,8 @@ class RTS_Smoother_2D:
         self.Ppr = np.zeros((K, 3, 3))
         self.Ppo = np.zeros((K, 3, 3))
 
+        # self.dXpr_f = np.zeros((1,3))  # initial state error is set to be zero.  
+
         # initial state and covariance
         self.Ppr[0] = P0
         self.Ppo[0] = P0
@@ -43,22 +45,23 @@ class RTS_Smoother_2D:
 
     '''propagate input noise'''
     def nv_prop(self, x, dt, Q_var):
+        # x = x_op(k-1)
         x = np.squeeze(x)
         A = np.array([[dt * math.cos(x[2]), 0],
-                    [dt * math.sin(x[2]), 0],
-                    [0                 , dt]])
+                      [dt * math.sin(x[2]), 0],
+                      [0                 , dt]])
         W_prop = A.dot(Q_var).dot(A.T)
         return W_prop
 
     '''meas. model'''
     def meas_model(self, x, l_xy, d):
-        # x = [x_k, y_k, theta_k]
+        # x = [x_k, y_k, theta_k] = x_op(k)
         # l_xy = [x_l, y_l]
         x_m = l_xy[0]-x[0]-d*math.cos(x[2])
         y_m = l_xy[1]-x[1]-d*math.sin(x[2])
 
         r_m = np.sqrt( x_m**2 + y_m**2 )
-        phi_m = np.arctan2(y_m, x_m) - x[2]
+        phi_m = np.arctan2(y_m, x_m) - x[2]    # in radian
         
         # safety code: wrap to PI
         phi_m = wrapToPi(phi_m)
@@ -67,14 +70,15 @@ class RTS_Smoother_2D:
 
     '''compute motion model Jacobian'''
     def compute_F(self, x_op, dt, v):
+        # for F_k-1, x_op = x_op(k-1)
         F = np.array([[1, 0, -dt * math.sin(x_op[2]) * v],
-                      [0, 1, -dt * math.cos(x_op[2]) * v],
+                      [0, 1,  dt * math.cos(x_op[2]) * v],
                       [0, 0,  1]],dtype=float)
         return F
 
     '''compute meas. model Jacobian'''
     def compute_G(self, x_op, l_xy, d):
-        # x_op = [x, y, theta]
+        # x_op = [x, y, theta] = x_op(k)
         # denominator 1
         D1 = np.sqrt( (l_xy[0] - x_op[0] - d*math.cos(x_op[2]))**2 + (l_xy[1] - x_op[1] - d*math.sin(x_op[2]))**2 )
         # denominator 2
@@ -89,14 +93,14 @@ class RTS_Smoother_2D:
         g23 = d**2 - d*math.cos(x_op[2])*(l_xy[0] - x_op[0]) - d*math.sin(x_op[2])*(l_xy[1] - x_op[1])
 
         G = np.array([[g11/D1, g12/D1, g13/D1],
-                    [g21/D2, g22/D2, g23/D2 -1]])
+                      [g21/D2, g22/D2, g23/D2 -1]])
 
         return np.squeeze(G)
 
     '''compute ev_k'''
     def compute_ev_k(self, x_op_k1, x_op_k, v, om, T):
-        x_pro = self.motion_model(x_op_k1, T, v, om)
-        ev_k = x_pro - x_op_k.reshape(-1,1)
+        x_pro = self.motion_model(x_op_k1, T, v, om)  # f(x_op,k-1, v_k, 0)
+        ev_k = x_pro - x_op_k.reshape(-1,1)           # f(x_op,k-1, v_k, 0) - x_op,k
         ev_k[2] = wrapToPi(ev_k[2])
         return ev_k
 
@@ -111,15 +115,14 @@ class RTS_Smoother_2D:
         self.F[k-1,:,:] = F_k1
 
         # compute Wv_k
-        Wv_k = self.nv_prop(x_op_k, dt, self.Qi)
+        Wv_k = self.nv_prop(x_op_k1, dt, self.Qi)       # Q'_k = w_c(x_op_k1) * self.Qi * w_c(x_op_k1)
 
         l_k = np.nonzero(r_k);    l_k = np.asarray(l_k).reshape(-1,1)
+        M = np.count_nonzero(r_k, axis=0)               # at timestamp k, we have M meas. in total
 
-        M = np.count_nonzero(r_k,axis=0)        # at timestamp k, we have M meas. in total
+        # measurements
         # check if we have meas. or not
-        # print(M)
-        ey_k = np.empty(0)
-        W_y  = np.empty((0,0))
+        ey_k = np.empty(0);       W_y  = np.empty((0,0))
         # flag for measurement update
         update = True
         if M: 
@@ -146,7 +149,7 @@ class RTS_Smoother_2D:
         # forward equations
         if update:
             # equ. 1
-            self.Ppr[k,:,:] = F_k1.dot(self.Ppr[k-1,:,:]).dot(F_k1.T) + Wv_k
+            self.Ppr[k,:,:] = F_k1.dot(self.Ppo[k-1,:,:]).dot(F_k1.T) + Wv_k
             # equ. 2
             dx_check = F_k1.dot(self.dXpo_f[k-1,:].reshape(-1,1)) + ev_k
             self.dXpr_f[k,:] = np.squeeze(dx_check)
@@ -161,7 +164,7 @@ class RTS_Smoother_2D:
             self.dXpo_f[k,:] = np.squeeze(dx_hat)
         else:
             # equ. 1
-            self.Ppr[k,:,:] = F_k1.dot(self.Ppr[k-1,:,:]).dot(F_k1.T) + Wv_k
+            self.Ppr[k,:,:] = F_k1.dot(self.Ppo[k-1,:,:]).dot(F_k1.T) + Wv_k
             # equ. 2
             dx_check = F_k1.dot(self.dXpo_f[k-1,:].reshape(-1,1)) + ev_k
             self.dXpr_f[k,:] = np.squeeze(dx_check)
