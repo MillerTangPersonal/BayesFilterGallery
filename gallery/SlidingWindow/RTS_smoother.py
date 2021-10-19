@@ -21,8 +21,7 @@ class RTS_Smoother_2D:
         # self.dXpr_f = np.zeros((1,3))  # initial state error is set to be zero.  
 
         # initial state and covariance
-        self.Ppr[0] = P0
-        self.Ppo[0] = P0
+        self.Ppr[0,:,:] = P0
         self.Qi = Q        # input noise
         self.Rm = R        # meas. noise
         self.landmark = l  # landmark positions
@@ -56,6 +55,7 @@ class RTS_Smoother_2D:
     def meas_model(self, x, l_xy, d):
         # x = [x_k, y_k, theta_k] = x_op(k)
         # l_xy = [x_l, y_l]
+        x = np.squeeze(x)
         x_m = l_xy[0]-x[0]-d*math.cos(x[2])
         y_m = l_xy[1]-x[1]-d*math.sin(x[2])
 
@@ -63,8 +63,8 @@ class RTS_Smoother_2D:
         phi_m = np.arctan2(y_m, x_m) - x[2]    # in radian
         
         # safety code: wrap to PI
-        # phi_m = wrapToPi(phi_m)
-        
+        phi_m = wrapToPi(phi_m)
+
         meas = np.array([r_m, phi_m])
         return meas.reshape(-1,1)
 
@@ -81,6 +81,7 @@ class RTS_Smoother_2D:
     def compute_G(self, x_op, l_xy, d):
         # x_op = [x, y, theta] = x_op(k)
         # denominator 1
+        x_op = np.squeeze(x_op)
         D1 = math.sqrt( (l_xy[0] - x_op[0] - d*math.cos(x_op[2]))**2 + (l_xy[1] - x_op[1] - d*math.sin(x_op[2]))**2 )
         # denominator 2
         D2 = ( l_xy[0]-x_op[0]-d*math.cos(x_op[2]) )**2 + ( l_xy[1]-x_op[1]-d*math.sin(x_op[2]) )**2
@@ -94,7 +95,7 @@ class RTS_Smoother_2D:
         g23 = d**2 - d*math.cos(x_op[2])*(l_xy[0] - x_op[0]) - d*math.sin(x_op[2])*(l_xy[1] - x_op[1])
 
         G = np.array([[g11/D1, g12/D1, g13/D1],
-                      [g21/D2, g22/D2, g23/D2 -1]])
+                      [g21/D2, g22/D2, g23/D2 - 1.0]], dtype=float)
 
         return np.squeeze(G)
 
@@ -104,6 +105,60 @@ class RTS_Smoother_2D:
         ev_k = x_pro - x_op_k.reshape(-1,1)           # f(x_op,k-1, v_k, 0) - x_op,k
         ev_k[2] = wrapToPi(ev_k[2])
         return ev_k
+
+    '''compute self.Ppr[0,:,:] and self.dXpo_f[0,:] for RTS smoother'''
+    def compute_init_po(self, x_op_k, r_k, b_k):
+        l_k = np.nonzero(r_k);    l_k = np.asarray(l_k).reshape(-1,1)
+        M = np.count_nonzero(r_k, axis=0)               # at timestamp k, we have M meas. in total
+        # measurements
+        # check if we have meas. or not
+        ey_k = np.empty(0);       W_y  = np.empty((0,0))
+        # flag for measurement update
+        update = True
+        if M: 
+            G = np.empty((0,3))                         # empty G to contain all the Gs in timestep k
+            for m in range(M): 
+                l_xy = self.landmark[l_k[m,0], :]       # the m-th landmark pos.
+                r_l = r_k[l_k[m,0]]                     # [timestamp, id of landmark]
+                b_l = b_k[l_k[m,0]]
+                y = np.array([r_l, b_l]).reshape(-1,1)
+                ey = y - self.meas_model(x_op_k, l_xy, self.d)
+                # compute angle error, wrap to pi
+                ey[1] = wrapToPi(ey[1])
+                '''compute ey_k'''
+                ey_k = np.append(ey_k, np.squeeze(ey))
+                # --------- save the variance of meas. ------------ #
+                W_y = block_diag(W_y, self.Rm)
+                # compute G
+                G_i = self.compute_G(x_op_k, l_xy, self.d)
+                G = np.concatenate((G, G_i), axis=0)
+        else:
+            # when no measurements, use Xpr as Xpo
+            update = False
+
+        # forward equations
+        if update:
+            # equ. 3
+            GM = G.dot(self.Ppr[0,:,:]).dot(G.T) + W_y
+            K_k = self.Ppr[0,:,:].dot(G.T).dot(linalg.inv(GM))
+            # equ. 4
+            self.Ppo[0,:,:] = (np.eye(3) - K_k.dot(G)).dot(self.Ppr[0,:,:])
+            # equ. 5
+            in_err = ey_k.reshape(-1,1) - G.dot(self.dXpr_f[0,:].reshape(-1,1))   # innovation error
+            # wrap to pi
+            for idx in range(in_err.shape[0]):
+                if (idx%2):
+                    in_err[idx,0] = wrapToPi(in_err[idx,0])
+            dx_hat = self.dXpr_f[0,:].reshape(-1,1) + K_k.dot(in_err)
+            # wrap to pi
+            dx_hat[2,0] = wrapToPi(dx_hat[2,0])    # dx_hat[2,0] is delta th
+            self.dXpo_f[0,:] = np.squeeze(dx_hat)
+
+        else:
+            # no meas. to update
+            self.Ppo[0,:,:] = self.Ppr[0,:,:]
+            self.dXpo_f[0,:] = self.dXpr_f[0,:]
+
 
     '''forward pass'''
     def forward(self, x_op_k1, x_op_k, v_k, om_k, r_k, b_k, dt, k):
@@ -120,7 +175,6 @@ class RTS_Smoother_2D:
 
         l_k = np.nonzero(r_k);    l_k = np.asarray(l_k).reshape(-1,1)
         M = np.count_nonzero(r_k, axis=0)               # at timestamp k, we have M meas. in total
-
         # measurements
         # check if we have meas. or not
         ey_k = np.empty(0);       W_y  = np.empty((0,0))
@@ -163,6 +217,10 @@ class RTS_Smoother_2D:
             self.Ppo[k,:,:] = (np.eye(3) - K_k.dot(G)).dot(self.Ppr[k,:,:])
             # equ. 5
             in_err = ey_k.reshape(-1,1) - G.dot(self.dXpr_f[k,:].reshape(-1,1))   # innovation error
+            # wrap to pi
+            for idx in range(in_err.shape[0]):
+                if (idx%2):
+                    in_err[idx,0] = wrapToPi(in_err[idx,0])
             dx_hat = self.dXpr_f[k,:].reshape(-1,1) + K_k.dot(in_err)
             # wrap to pi
             dx_hat[2,0] = wrapToPi(dx_hat[2,0])    # dx_hat[2,0] is delta th
@@ -197,6 +255,7 @@ class RTS_Smoother_2D:
         PAP = self.Ppo[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr[k,:,:])).dot(dx)
 
         dx_hat = self.dXpo_f[k-1,:].reshape(-1,1) + PAP
+        dx_hat[2,0] = wrapToPi(dx_hat[2,0])
         self.dXpo[k-1,:] = np.squeeze(dx_hat)
 
 

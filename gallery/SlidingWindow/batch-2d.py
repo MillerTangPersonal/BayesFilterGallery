@@ -1,12 +1,13 @@
-''' sliding window filter for a 2D estimation using RTS smoother'''
-from util import wrapToPi
+''' 2D Batch estimation using RTS smoother'''
 import numpy as np
-import string, os
+import os
+from numpy.core.defchararray import index
 from scipy.io import loadmat
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import math
 # import RTS-smoother
+from util import wrapToPi
 from RTS_smoother import RTS_Smoother_2D
 
 np.set_printoptions(precision=5)
@@ -30,10 +31,13 @@ if __name__ == "__main__":
     x_true = loadmat(curr+'/dataset2.mat')['x_true']
     y_true = loadmat(curr+'/dataset2.mat')['y_true']
     th_true = loadmat(curr+'/dataset2.mat')['th_true']
+    
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
 
+    true_valid = loadmat(curr+'/dataset2.mat')['true_valid']
+
     # select a small amount of data for debugging
-    w1 = 0; w2 = 12609   # 12609
+    w1 = 500; w2 = 1000  # 12609
     t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
@@ -80,6 +84,12 @@ if __name__ == "__main__":
         error = 0;  an_error = 0
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation
+
+        # compute Ppr_0,f and dXpr[0,:]
+        r_k = r_meas[0,:]                 # y(k)
+        b_k = b_meas[0,:]
+        smoother.compute_init_po(x_op[0 : 3], r_k, b_k)
+
         # RTS smoother forward pass
         for k in range(1, K):     # k = 1 ~ K-1 
             # operting point 
@@ -100,6 +110,9 @@ if __name__ == "__main__":
         # update x_op_k one by one
         for k in range(K):
             x_new = x_op[3*k : 3*k+3] + smoother.dXpo[k,:].reshape(-1,1)
+            # wrap to Pi
+            x_new[2] = wrapToPi(x_new[2])
+
             x_op[3*k : 3*k+3] = x_new
             # update delta x error 
             error = error + math.sqrt(smoother.dXpo[k,0]**2 + smoother.dXpo[k,1]**2)
@@ -109,9 +122,20 @@ if __name__ == "__main__":
         delta_an = an_error / (K+1)
         print("pos error: {0}, angle error: {1}".format(delta_p, delta_an))
 
-    # compute error
-    x_dr_v = x_dr.reshape(-1,3)
+    # ------- End GN -------- #
+    # vector to matrix
     x_op_v = x_op.reshape(-1,3)
+    # remove invalid ground truth and estimation 
+    REMOVE = False
+    if REMOVE:
+        gt_idx = np.where(true_valid==1)[0]
+        t = t[gt_idx,:]
+        vicon_gt = vicon_gt[gt_idx,:]
+        x_op_v = x_op_v[gt_idx,:]
+        Ppo = smoother.Ppo[gt_idx,:,:]
+        K = vicon_gt.shape[0]
+
+    # compute error
     x_error = x_op_v[:,0] - vicon_gt[:,0]
     y_error = x_op_v[:,1] - vicon_gt[:,1]
     th_error = np.zeros(K)
