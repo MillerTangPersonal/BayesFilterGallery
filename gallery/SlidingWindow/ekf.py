@@ -1,14 +1,14 @@
-''' 2D Batch estimation using RTS smoother'''
+'''implement EKF for 2D robot'''
 import numpy as np
 import os
-from numpy.core.defchararray import index
 from scipy.io import loadmat
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import math
+from scipy import linalg
 # import RTS-smoother
 from util import wrapToPi
-from RTS_smoother import RTS_Smoother_2D
+from robot_2d import GroundRobot
 
 np.set_printoptions(precision=5)
 
@@ -54,105 +54,95 @@ if __name__ == "__main__":
     # meas. noise
     R = np.diag([r_var[0,0], b_var[0,0]])
     # filter the measurements
-    r_max = 5                                          
+    r_max = 5                                         
     for i in range(r_meas.shape[0]):
         for j in range(r_meas.shape[1]):
             if r_meas[i,j] > r_max:
                 r_meas[i,j] = 0.0
 
-    smoother = RTS_Smoother_2D(P0, Q, R, l, d, K)
+    # ground robot
+    robot = GroundRobot(Q, R, d, l ,T)
 
-    # compute the operating point initially
-    # compute operating points
-    x_dr = np.zeros((3*K, 1))    # column vector
-    x_dr[0:3] = X0.reshape(-1,1)
-    for k in range(1, K):     # k = 1 : K-1 
-        # compute operating point x_op (dead reckoning)
-        x_dr[3*k : 3*k+3] = smoother.motion_model(x_dr[3*k-3 : 3*k], T, v[k], om[k])
+    Xpr = np.zeros((K, 3))
+    Xpo = np.zeros((K, 3))
+    Ppr = np.zeros((K, 3, 3))
+    Ppo = np.zeros((K, 3, 3))      
+    
+    # init
+    Xpr[0,:] = X0;      Ppr[0,:,:] = P0; 
+    Xpo[0,:] = X0;      Ppo[0,:,:] = P0; 
+    # EKF implementation
+    for k in range(1, K):
+        v_k = v[k];             om_k = om[k]
+        r_k = r_meas[k,:];      b_k = b_meas[k,:]
 
-    # Gauss-Newton 
-    # in each iteration, 
-    # (1) do one batch estimation for dx 
-    # (2) update the operating point x_op
-    # (3) check the convergence
-    iter = 0;       max_iter = 10; 
-    delta_p = 1;    delta_an = 1; 
-    x_op = np.copy(x_dr)
+        F_k1 = robot.compute_F(Xpo[k-1,:], v_k)
+        Qv_k = robot.nv_prop(Xpo[k-1,:])
+        # eq. 1
+        Ppr[k,:,:] = F_k1.dot(Ppo[k-1,:,:]).dot(F_k1.T) + Qv_k
+        # eq. 2
+        Xpr[k,:] = np.squeeze(robot.motion_model(Xpo[k-1,:], v_k, om_k))
 
-    while (iter < max_iter) and ((delta_p > 0.001) and (delta_an > 0.001)):
-        iter = iter + 1; 
-        error = 0;  an_error = 0
-        print("\nIteration: #{0}\n".format(iter))
-        # full batch estimation
+        # measurements
+        l_k = np.nonzero(r_k);    l_k = np.asarray(l_k).reshape(-1,1)
+        M = np.count_nonzero(r_k, axis=0)               # at timestamp k, we have M meas. in total
 
-        # compute Ppr_0,f and dXpr[0,:]
-        r_k = r_meas[0,:]                 # y(k)
-        b_k = b_meas[0,:]
-        smoother.compute_init_po(x_op[0 : 3], r_k, b_k)
+        # flag for measurement update
+        update = True
+        ey_k = np.empty(0);       Rk_y  = np.empty((0,0))
+        if M: 
+            G = np.empty((0,3))                            # empty G to contain all the Gs in timestep k
+            for m in range(M): 
+                l_xy = robot.landmark[l_k[m,0], :]         # the m-th landmark pos.
+                r_l = r_k[l_k[m,0]]                        # [timestamp, id of landmark]
+                b_l = b_k[l_k[m,0]]
+                y = np.array([r_l, b_l]).reshape(-1,1)
+                ey = y - robot.meas_model(Xpr[k,:], l_xy)  # y_k - g(x_check,0)
+                # compute angle error, wrap to pi
+                ey[1] = wrapToPi(ey[1])
+                '''compute ey_k'''
+                ey_k = np.append(ey_k, np.squeeze(ey))
+                # --------- save the variance of meas. ------------ #
+                Rk_y = linalg.block_diag(Rk_y, robot.Rm)
+                # compute G
+                G_i = robot.compute_G(Xpr[k,:], l_xy)
+                G = np.concatenate((G, G_i), axis=0)
+        else:
+            # when no measurements, use Xpr as Xpo
+            update = False
 
-        # RTS smoother forward pass
-        for k in range(1, K):     # k = 1 ~ K-1 
-            # operting point 
-            x_op_k1 = x_op[3*k-3 : 3*k]       # x_op(k-1)
-            x_op_k = x_op[3*k : 3*k+3]        # x_op(k)
-            # measurements at timestamp k
-            r_k = r_meas[k,:]                 # y(k)
-            b_k = b_meas[k,:]
+        if update:
+            # eq. 3
+            GM = G.dot(Ppr[k,:,:]).dot(G.T) + Rk_y 
+            K_k = Ppr[k,:,:].dot(G.T).dot(linalg.inv(GM))
+            # equ. 4
+            Ppo[k,:,:] = (np.eye(3) - K_k.dot(G)).dot(Ppr[k,:,:])
+            # equ. 5
+            Xpo[k,:] = Xpr[k,:] + np.squeeze(K_k.dot(ey_k))
+        else:
+            Ppo[k,:,:] = Ppr[k,:,:]
+            Xpo[k,:] =  Xpr[k,:]
 
-            # forward pass
-            smoother.forward(x_op_k1, x_op_k, v[k], om[k], r_k, b_k, T, k)
 
-        # RTS smoother backward pass
-        for k in range(K-1, 0, -1):   # k = K-1 ~ 1
-            smoother.backward(k)
-
-        # after forward and backward pass
-        # update x_op_k one by one
-        for k in range(K):
-            x_new = x_op[3*k : 3*k+3] + smoother.dXpo[k,:].reshape(-1,1)
-            # wrap to Pi
-            x_new[2] = wrapToPi(x_new[2])
-
-            x_op[3*k : 3*k+3] = x_new
-            # update delta x error 
-            error = error + math.sqrt(smoother.dXpo[k,0]**2 + smoother.dXpo[k,1]**2)
-            an_error = an_error + math.sqrt(smoother.dXpo[k,2]**2)
-
-        delta_p = error / (K+1)
-        delta_an = an_error / (K+1)
-        print("pos error: {0}, angle error: {1}".format(delta_p, delta_an))
-
-    # ------- End GN -------- #
-    # vector to matrix
-    x_op_v = x_op.reshape(-1,3)
-    # remove invalid ground truth and estimation 
-    REMOVE = False
-    if REMOVE:
-        gt_idx = np.where(true_valid==1)[0]
-        t = t[gt_idx,:]
-        vicon_gt = vicon_gt[gt_idx,:]
-        x_op_v = x_op_v[gt_idx,:]
-        Ppo = smoother.Ppo[gt_idx,:,:]
-        K = vicon_gt.shape[0]
 
     # compute error
-    x_error = x_op_v[:,0] - vicon_gt[:,0]
-    y_error = x_op_v[:,1] - vicon_gt[:,1]
+    x_error = Xpo[:,0] - vicon_gt[:,0]
+    y_error = Xpo[:,1] - vicon_gt[:,1]
     th_error = np.zeros(K)
     sigma_x = np.zeros([K,1])
     sigma_y = np.zeros([K,1])
     sigma_th = np.zeros([K,1])
     for k in range(K):
-        th_error[k] = x_op_v[k,2] - vicon_gt[k,2] 
+        th_error[k] = Xpo[k,2] - vicon_gt[k,2] 
         th_error[k] = wrapToPi(th_error[k])
         # extract the covariance matrix
-        sigma_x[k,0] = np.sqrt(smoother.Ppo[k,0,0])
-        sigma_y[k,0] = np.sqrt(smoother.Ppo[k,1,1])
-        sigma_th[k,0] = np.sqrt(smoother.Ppo[k,2,2])
+        sigma_x[k,0] = np.sqrt(Ppo[k,0,0])
+        sigma_y[k,0] = np.sqrt(Ppo[k,1,1])
+        sigma_th[k,0] = np.sqrt(Ppo[k,2,2])
 
     # compute RMSE
-    rms_x = math.sqrt(mean_squared_error(vicon_gt[:,0], x_op_v[:,0]))
-    rms_y = math.sqrt(mean_squared_error(vicon_gt[:,1], x_op_v[:,1]))
+    rms_x = math.sqrt(mean_squared_error(vicon_gt[:,0], Xpo[:,0]))
+    rms_y = math.sqrt(mean_squared_error(vicon_gt[:,1], Xpo[:,1]))
     rms_th = 0
     for k in range(K):
         rms_th +=  th_error[k]**2     # square error
@@ -165,7 +155,7 @@ if __name__ == "__main__":
     ## visual ground truth
     fig1 = plt.figure(facecolor="white")
     plt.plot(vicon_gt[:,0], vicon_gt[:,1], color='red')
-    plt.plot(x_op_v[:,0], x_op_v[:,1], color = 'royalblue')
+    plt.plot(Xpo[:,0], Xpo[:,1], color = 'royalblue')
 
     fig2 = plt.figure(facecolor="white")
     ax = fig2.add_subplot(111)
