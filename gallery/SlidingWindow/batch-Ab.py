@@ -8,9 +8,10 @@ import math
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.linalg import cho_solve, cho_factor
-# import RTS-smoother
+
 from util import wrapToPi
 from batch_class import Batch_2D
+from robot_2d import GroundRobot
 
 np.set_printoptions(precision=5)
 
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
 
     # select a small amount of data for debugging
-    w1 = 500;       w2 = 1000    # 1000,  12609
+    w1 = 500;       w2 = 550    # 1000,  12609
     t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
@@ -59,8 +60,10 @@ if __name__ == "__main__":
             if r_meas[i,j] > r_max:
                 r_meas[i,j] = 0.0
 
-    # using some function in RTS-smoother to construct matrix
-    batch = Batch_2D(P0, Q, R, l, d, K)
+    # ground robot
+    robot = GroundRobot(Q, R, d, l ,T)
+
+    batch = Batch_2D(P0, robot, K)
 
     # compute the operating point initially
     # compute operating points
@@ -68,7 +71,7 @@ if __name__ == "__main__":
     x_dr[0:3] = X0.reshape(-1,1)
     for k in range(1, K):     # k = 1 : K-1 
         # compute operating point x_op (dead reckoning)
-        x_dr[3*k : 3*k+3] = batch.motion_model(x_dr[3*k-3 : 3*k], T, v[k], om[k])
+        x_dr[3*k : 3*k+3] = robot.motion_model(x_dr[3*k-3 : 3*k], v[k], om[k])
 
     # Gauss-Newton 
     # in each iteration, 
