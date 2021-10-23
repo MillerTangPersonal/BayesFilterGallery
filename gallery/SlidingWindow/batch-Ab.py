@@ -37,7 +37,7 @@ if __name__ == "__main__":
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
 
     # select a small amount of data for debugging
-    w1 = 500;       w2 = 1000    # 1000,  12609
+    w1 = 0;       w2 = 1000    # 1000,  12609
     t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
