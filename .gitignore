@@ -8,3 +8,5 @@ ros_ws/devel/
 *.json
 
 dataset/
+
+*.bag
