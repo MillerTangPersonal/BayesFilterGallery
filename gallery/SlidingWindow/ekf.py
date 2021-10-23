@@ -37,7 +37,7 @@ if __name__ == "__main__":
     true_valid = loadmat(curr+'/dataset2.mat')['true_valid']
 
     # select a small amount of data for debugging
-    w1 = 500; w2 = 550  # 12609
+    w1 = 0; w2 = 12609  # 12609
     t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
@@ -48,11 +48,12 @@ if __name__ == "__main__":
     # initial position 
     X0 = vicon_gt[0,:]
     # initial covariance
-    P0 = np.diag([1, 1, 0.01])
+    P0 = np.diag([0.0001, 0.0001, 0.0001])
     # input noise
     Q = np.diag([v_var[0,0], om_var[0,0]])
     # meas. noise
     R = np.diag([r_var[0,0], b_var[0,0]])
+
     # filter the measurements
     r_max = 5                                         
     for i in range(r_meas.shape[0]):
@@ -182,6 +183,28 @@ if __name__ == "__main__":
     cx.plot(t,  3*sigma_th[:,0], '--', color='red')
     plt.xlim(0.0, t[-1,0])
     plt.ylim(-0.3,0.3)
+    plt.title('error in theta')
+
+
+    fig5 = plt.figure(facecolor="white")
+    ax1 = fig5.add_subplot(111)
+    ax1.plot(t,  Xpo[:,0], color='royalblue',linewidth=2.0, alpha=1.0)
+    ax1.plot(t, vicon_gt[:,0], '--', color='red')
+    plt.xlim(0.0, t[-1,0])
+    plt.title('error in x')
+
+    fig6 = plt.figure(facecolor="white")
+    bx1 = fig6.add_subplot(111)
+    bx1.plot(t,  Xpo[:,1], color='royalblue',linewidth=2.0, alpha=1.0)
+    bx1.plot(t, vicon_gt[:,1], '--', color='red')
+    plt.xlim(0.0, t[-1,0])
+    plt.title('error in y')
+
+    fig7 = plt.figure(facecolor="white")
+    cx1 = fig7.add_subplot(111)
+    cx1.plot(t, Xpo[:,2], color='royalblue',linewidth=2.0, alpha=1.0)
+    cx1.plot(t, vicon_gt[:,2], '--', color='red')
+    plt.xlim(0.0, t[-1,0])
     plt.title('error in theta')
 
     plt.show()

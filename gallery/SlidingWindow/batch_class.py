@@ -16,8 +16,8 @@ class Batch_2D:
 
     '''compute ev_k'''
     def compute_ev_k(self, x_op_k1, x_op_k, v, om):
-        x_pro = self.robot.motion_model(x_op_k1, v, om)  # f(x_op,k-1, v_k, 0)
-        ev_k = x_pro - x_op_k.reshape(-1,1)           # f(x_op,k-1, v_k, 0) - x_op,k
+        fx_pro = self.robot.motion_model(x_op_k1, v, om)  # f(x_op,k-1, v_k, 0)
+        ev_k = fx_pro - x_op_k.reshape(-1,1)           # f(x_op,k-1, v_k, 0) - x_op,k
         ev_k[2] = wrapToPi(ev_k[2])
         return ev_k
 
@@ -34,10 +34,10 @@ class Batch_2D:
         W_v = np.empty((0,0));  W_y = np.empty((0,0))
 
         # construct H matrix
-        H_U = np.eye(3*(self.Kmax))              # the upper matrix has a fixed dimension
+        H_U = np.eye(3*(self.Kmax))                  # the upper matrix has a fixed dimension
         H_L = np.empty((0,0))                        # the lower matrix changes in dimension.
 
-        e_v_0 = x_op[0:3].reshape(-1,1) - x_check.reshape(-1,1)
+        e_v_0 = x_check.reshape(-1,1) - x_op[0:3].reshape(-1,1)
         e_v = np.append(e_v, np.squeeze(e_v_0))
         W_v = block_diag(W_v, self.P0_check)
 

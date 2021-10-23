@@ -37,7 +37,7 @@ if __name__ == "__main__":
     vicon_gt = np.concatenate([x_true, y_true, th_true], axis=1)
 
     # select a small amount of data for debugging
-    w1 = 500;       w2 = 550    # 1000,  12609
+    w1 = 500;       w2 = 1000    # 1000,  12609
     t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # initial position 
     X0 = vicon_gt[0,:]
     # initial covariance
-    P0 = np.diag([1, 1, 0.01])
+    P0 = np.diag([0.001, 0.001, 0.001])
     # input noise
     Q = np.diag([v_var[0,0], om_var[0,0]])
     # meas. noise
@@ -95,11 +95,11 @@ if __name__ == "__main__":
         # solve for dx
         
         # (1) normal solve 
-        #dx = np.linalg.solve(A, b)
+        dx = np.linalg.solve(A, b)
         
         # (2) solve by Cholesky factorization
-        c, low = cho_factor(A)
-        dx = cho_solve((c,low), b)
+        # c, low = cho_factor(A)
+        # dx = cho_solve((c,low), b)
 
         # (3) sparse solve
         # A = csc_matrix(A, dtype=float)   # convert A into CSC sparse matrix form

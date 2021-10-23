@@ -37,7 +37,7 @@ if __name__ == "__main__":
     true_valid = loadmat(curr+'/dataset2.mat')['true_valid']
 
     # select a small amount of data for debugging
-    w1 = 500; w2 = 550  # 12609
+    w1 = 0; w2 = 12609  # 12609
     t = t[w1 : w2];                   t = t - t[0,0]          #reset timestamp
     v = v[w1 : w2];                   om = om[w1 : w2]
     r_meas = r_meas[w1 : w2, :];      b_meas = b_meas[w1 : w2, :]
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # initial position 
     X0 = vicon_gt[0,:]
     # initial covariance
-    P0 = np.diag([1, 1, 0.01])
+    P0 = np.diag([0.0001, 0.0001, 0.0001])
     # input noise
     Q = np.diag([v_var[0,0], om_var[0,0]])
     # meas. noise
@@ -81,10 +81,11 @@ if __name__ == "__main__":
     # (1) do one batch estimation for dx 
     # (2) update the operating point x_op
     # (3) check the convergence
-    iter = 0;       max_iter = 10; 
+    iter = 0;       max_iter = 100; 
     delta_p = 1;    delta_an = 1; 
     x_op = np.copy(x_dr)
 
+    alpha = 0.8;  
     while (iter < max_iter) and ((delta_p > 0.001) and (delta_an > 0.001)):
         iter = iter + 1; 
         error = 0;  an_error = 0
@@ -98,7 +99,7 @@ if __name__ == "__main__":
         # after forward and backward pass
         # update x_op_k one by one
         for k in range(K):
-            x_new = x_op[3*k : 3*k+3] + smoother.dXpo[k,:].reshape(-1,1)
+            x_new = x_op[3*k : 3*k+3] + alpha * smoother.dXpo[k,:].reshape(-1,1)
             # wrap to Pi
             x_new[2] = wrapToPi(x_new[2])
 
@@ -115,14 +116,19 @@ if __name__ == "__main__":
     # vector to matrix
     x_op_v = x_op.reshape(-1,3)
     # remove invalid ground truth and estimation 
-    REMOVE = False
+    REMOVE = True
     if REMOVE:
-        gt_idx = np.where(true_valid==1)[0]
-        t = t[gt_idx,:]
-        vicon_gt = vicon_gt[gt_idx,:]
-        x_op_v = x_op_v[gt_idx,:]
-        Ppo = smoother.Ppo[gt_idx,:,:]
-        K = vicon_gt.shape[0]
+        #gt_idx = np.where(true_valid==1)[0]
+        # t = t[gt_idx,:]
+        # vicon_gt = vicon_gt[gt_idx,:]
+        # x_op_v = x_op_v[gt_idx,:]
+        # Ppo = smoother.Ppo[gt_idx,:,:]
+        # K = vicon_gt.shape[0]
+
+        # shift gt by one timestamp
+        vicon_gt = vicon_gt[0:K-1,:]
+        dummy_gt = vicon_gt[0,:].reshape(1,-1)
+        vicon_gt = np.concatenate((dummy_gt, vicon_gt), axis=0)
 
     # compute error
     x_error = x_op_v[:,0] - vicon_gt[:,0]
@@ -134,6 +140,7 @@ if __name__ == "__main__":
     for k in range(K):
         th_error[k] = x_op_v[k,2] - vicon_gt[k,2] 
         th_error[k] = wrapToPi(th_error[k])
+
         # extract the covariance matrix
         sigma_x[k,0] = np.sqrt(smoother.Ppo[k,0,0])
         sigma_y[k,0] = np.sqrt(smoother.Ppo[k,1,1])
@@ -182,5 +189,28 @@ if __name__ == "__main__":
     plt.xlim(0.0, t[-1,0])
     plt.ylim(-0.3,0.3)
     plt.title('error in theta')
+
+    fig5 = plt.figure(facecolor="white")
+    ax1 = fig5.add_subplot(111)
+    ax1.plot(t,  x_op_v[:,0], color='royalblue',linewidth=2.0, alpha=1.0)
+    ax1.plot(t, vicon_gt[:,0], '--', color='red')
+    plt.xlim(0.0, t[-1,0])
+    plt.title('error in x')
+
+    fig6 = plt.figure(facecolor="white")
+    bx1 = fig6.add_subplot(111)
+    bx1.plot(t,  x_op_v[:,1], color='royalblue',linewidth=2.0, alpha=1.0)
+    bx1.plot(t, vicon_gt[:,1], '--', color='red')
+    plt.xlim(0.0, t[-1,0])
+    plt.title('error in y')
+
+    fig7 = plt.figure(facecolor="white")
+    cx1 = fig7.add_subplot(111)
+    cx1.plot(t,  x_op_v[:,2], color='royalblue',linewidth=2.0, alpha=1.0)
+    cx1.plot(t, vicon_gt[:,2], '--', color='red')
+    plt.xlim(0.0, t[-1,0])
+    plt.title('error in theta')
+
+
 
     plt.show()
