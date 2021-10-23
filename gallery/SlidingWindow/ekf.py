@@ -55,7 +55,7 @@ if __name__ == "__main__":
     R = np.diag([r_var[0,0], b_var[0,0]])
 
     # filter the measurements
-    r_max = 5                                         
+    r_max = 1                                         
     for i in range(r_meas.shape[0]):
         for j in range(r_meas.shape[1]):
             if r_meas[i,j] > r_max:

@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # meas. noise
     R = np.diag([r_var[0,0], b_var[0,0]])
     # filter the measurements
-    r_max = 5                                         
+    r_max = 1                                         
     for i in range(r_meas.shape[0]):
         for j in range(r_meas.shape[1]):
             if r_meas[i,j] > r_max:
@@ -86,8 +86,9 @@ if __name__ == "__main__":
     x_op = np.copy(x_dr)
 
     alpha = 0.8;  
-    while (iter < max_iter) and ((delta_px > 0.001) and (delta_py > 0.001) and (delta_an > 0.001)):
+    while (iter < max_iter) and ((delta_px > 0.001) or (delta_py > 0.001) or (delta_an > 0.001)):
         iter = iter + 1; 
+
         x_error = 0;     y_error=0;     an_error = 0
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation
@@ -109,9 +110,27 @@ if __name__ == "__main__":
             y_error  = y_error + math.sqrt(smoother.dXpo[k,1]**2)
             an_error = an_error + math.sqrt(smoother.dXpo[k,2]**2)
 
+            # err_x = math.sqrt(smoother.dXpo[k,0]**2)
+            # err_y = math.sqrt(smoother.dXpo[k,1]**2)
+            # err_an = math.sqrt(smoother.dXpo[k,2]**2)
+            # if x_error < err_x:
+            #     x_error = err_x
+            
+            # if y_error < err_y:
+            #     y_error = err_y
+
+            # if an_error < err_an:
+            #     an_error = err_an
+            
+
         delta_px = x_error / (K+1)
         delta_py = y_error / (K+1)
         delta_an = an_error / (K+1)
+
+        # delta_px = x_error 
+        # delta_py = y_error 
+        # delta_an = an_error 
+
         print("pos. x error: {0}, pos. y error: {1} angle error: {2}".format(delta_px, delta_py, delta_an))
 
     # ------- End GN -------- #
@@ -125,15 +144,23 @@ if __name__ == "__main__":
     sigma_x = np.zeros([K,1])
     sigma_y = np.zeros([K,1])
     sigma_th = np.zeros([K,1])
+
+    sigma_x_f = np.zeros([K,1])
+    sigma_y_f = np.zeros([K,1])
+    sigma_th_f = np.zeros([K,1])
     for k in range(K):
         th_error[k] = x_op_v[k,2] - vicon_gt[k,2] 
         th_error[k] = wrapToPi(th_error[k])
 
         # extract the covariance matrix
+        sigma_x_f[k,0] = np.sqrt(smoother.Ppo_f[k,0,0])
+        sigma_y_f[k,0] = np.sqrt(smoother.Ppo_f[k,1,1])
+        sigma_th_f[k,0] = np.sqrt(smoother.Ppo_f[k,2,2])
+
         sigma_x[k,0] = np.sqrt(smoother.Ppo[k,0,0])
         sigma_y[k,0] = np.sqrt(smoother.Ppo[k,1,1])
         sigma_th[k,0] = np.sqrt(smoother.Ppo[k,2,2])
-
+    
     # compute RMSE
     rms_x = math.sqrt(mean_squared_error(vicon_gt[:,0], x_op_v[:,0]))
     rms_y = math.sqrt(mean_squared_error(vicon_gt[:,1], x_op_v[:,1]))
@@ -156,6 +183,8 @@ if __name__ == "__main__":
     ax.plot(t, x_error, color='royalblue',linewidth=2.0, alpha=1.0)
     ax.plot(t, -3*sigma_x[:,0], '--', color='red')
     ax.plot(t,  3*sigma_x[:,0], '--', color='red')
+    ax.plot(t, -3*sigma_x_f[:,0], '--', color='green')
+    ax.plot(t,  3*sigma_x_f[:,0], '--', color='green')
     plt.xlim(0.0, t[-1,0])
     plt.ylim(-0.3,0.3)
     plt.title('error in x')
@@ -165,6 +194,8 @@ if __name__ == "__main__":
     bx.plot(t, y_error, color='royalblue',linewidth=2.0, alpha=1.0)
     bx.plot(t, -3*sigma_y[:,0], '--', color='red')
     bx.plot(t, 3*sigma_y[:,0], '--', color='red')
+    bx.plot(t, -3*sigma_y_f[:,0], '--', color='green')
+    bx.plot(t,  3*sigma_y_f[:,0], '--', color='green')
     plt.xlim(0.0, t[-1,0])
     plt.ylim(-0.3,0.3)
     plt.title('error in y')
@@ -174,6 +205,8 @@ if __name__ == "__main__":
     cx.plot(t, th_error, color='royalblue',linewidth=2.0, alpha=1.0)
     cx.plot(t, -3*sigma_th[:,0], '--', color='red')
     cx.plot(t,  3*sigma_th[:,0], '--', color='red')
+    cx.plot(t, -3*sigma_th_f[:,0], '--', color='green')
+    cx.plot(t,  3*sigma_th_f[:,0], '--', color='green')
     plt.xlim(0.0, t[-1,0])
     plt.ylim(-0.3,0.3)
     plt.title('error in theta')

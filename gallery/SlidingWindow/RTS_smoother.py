@@ -137,6 +137,8 @@ class RTS_Smoother_2D:
                 # initialize
                 self.dXpo[k,:] = self.dXpo_f[k,:]
                 xk_hat = self.dXpo_f[k,:].reshape(-1,1)
+
+                self.Ppo[k,:,:] = self.Ppo_f[k,:,:]
             else:
                 # dXpo[k,:] computed from last iteration
                 xk_hat = self.dXpo[k,:].reshape(-1,1)
@@ -144,8 +146,11 @@ class RTS_Smoother_2D:
             dx = xk_hat - self.dXpr_f[k,:].reshape(-1,1)
             dx[2,0] = wrapToPi(dx[2,0])
 
-            PAP = self.Ppo_f[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr_f[k,:,:])).dot(dx)
+            PAP = self.Ppo_f[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr_f[k,:,:]))
 
-            dx_hat = self.dXpo_f[k-1,:].reshape(-1,1) + PAP
+            dx_hat = self.dXpo_f[k-1,:].reshape(-1,1) + PAP.dot(dx)
             dx_hat[2,0] = wrapToPi(dx_hat[2,0])
             self.dXpo[k-1,:] = np.squeeze(dx_hat)
+
+            # compute the final Ppo, Barfoot book Appendix A.3.2
+            self.Ppo[k-1,:,:] = self.Ppo_f[k-1,:,:] + PAP.dot(self.Ppo[k,:,:] - self.Ppr_f[k,:,:]).dot(PAP.T)
