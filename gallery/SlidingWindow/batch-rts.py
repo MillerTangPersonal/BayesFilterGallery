@@ -82,13 +82,13 @@ if __name__ == "__main__":
     # (2) update the operating point x_op
     # (3) check the convergence
     iter = 0;       max_iter = 100; 
-    delta_p = 1;    delta_an = 1; 
+    delta_px = 1;   delta_py = 1; delta_an = 1; 
     x_op = np.copy(x_dr)
 
     alpha = 0.8;  
-    while (iter < max_iter) and ((delta_p > 0.001) and (delta_an > 0.001)):
+    while (iter < max_iter) and ((delta_px > 0.001) and (delta_py > 0.001) and (delta_an > 0.001)):
         iter = iter + 1; 
-        error = 0;  an_error = 0
+        x_error = 0;     y_error=0;     an_error = 0
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation
 
@@ -105,30 +105,18 @@ if __name__ == "__main__":
 
             x_op[3*k : 3*k+3] = x_new
             # update delta x error 
-            error = error + math.sqrt(smoother.dXpo[k,0]**2 + smoother.dXpo[k,1]**2)
+            x_error  = x_error + math.sqrt(smoother.dXpo[k,0]**2)
+            y_error  = y_error + math.sqrt(smoother.dXpo[k,1]**2)
             an_error = an_error + math.sqrt(smoother.dXpo[k,2]**2)
 
-        delta_p = error / (K+1)
+        delta_px = x_error / (K+1)
+        delta_py = y_error / (K+1)
         delta_an = an_error / (K+1)
-        print("pos error: {0}, angle error: {1}".format(delta_p, delta_an))
+        print("pos. x error: {0}, pos. y error: {1} angle error: {2}".format(delta_px, delta_py, delta_an))
 
     # ------- End GN -------- #
     # vector to matrix
     x_op_v = x_op.reshape(-1,3)
-    # remove invalid ground truth and estimation 
-    REMOVE = True
-    if REMOVE:
-        #gt_idx = np.where(true_valid==1)[0]
-        # t = t[gt_idx,:]
-        # vicon_gt = vicon_gt[gt_idx,:]
-        # x_op_v = x_op_v[gt_idx,:]
-        # Ppo = smoother.Ppo[gt_idx,:,:]
-        # K = vicon_gt.shape[0]
-
-        # shift gt by one timestamp
-        vicon_gt = vicon_gt[0:K-1,:]
-        dummy_gt = vicon_gt[0,:].reshape(1,-1)
-        vicon_gt = np.concatenate((dummy_gt, vicon_gt), axis=0)
 
     # compute error
     x_error = x_op_v[:,0] - vicon_gt[:,0]
