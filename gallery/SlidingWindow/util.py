@@ -185,3 +185,52 @@ def plot_2d(t,Xpo,Ppo,vicon):
     dx = fig1.add_subplot(111)
     dx.plot(Xpo[0,:], Xpo[1,:], color='orangered',linewidth=1.0,alpha=1.0)
     dx.plot(vicon[:,0], vicon[:,1], color='steelblue',linewidth=1.0,alpha=1.0)
+
+    ## some other useful functions
+    def calculateRPY(q):
+        # q = [q.w, q.x, q.y, q.z]
+        RPY = np.empty([1,3])
+        # yaw
+        RPY[0, 2] = np.arctan2(2*(q[1]*q[2]+q[0]*q[3]), q[0]*q[0] + q[1]*q[1] - q[2]*q[2] - q[3]*q[3] )
+        # pitch
+        RPY[0, 1] = np.arcsin(-2*(q[1]*q[3] - q[0]*q[2]))
+        # roll
+        RPY[0, 0] = np.arctan2(2*(q[2]*q[3]+q[0]*q[1]) , q[0]*q[0] - q[1]*q[1] - q[2]*q[2] + q[3]*q[3])
+        return RPY
+
+    def createRotationMatrixFromRPY(r, p, y):
+        # rotation by roll around x axis
+        R_x = np.array([[            1,            0,            0],
+                        [            0,  math.cos(r), -math.sin(r)],
+                        [            0,  math.sin(r),  math.cos(r)]])
+        # rotation by pitch around y-axis
+        R_y = np.array([[  math.cos(p),            0,  math.sin(p)],
+                        [            0,            1,            0],
+                        [ -math.sin(p),            0,  math.cos(p)]])
+        # rotation by yaw around z-axis
+        R_z = np.array([[  math.cos(y), -math.sin(y),            0],
+                        [  math.sin(y),  math.cos(y),            0],
+                        [            0,            0,            1]])
+        return np.dot(R_z, np.dot(R_y, R_x))
+
+    def quat2Rot(q):
+        #convert quaternion to rotation matrix
+        # q = [q.w, q.x, q.y, q.z]
+        q = np.squeeze(q)
+        R = np.zeros((3,3))
+        R[0, 0] = q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]
+        R[0, 1] = 2 * q[1] * q[2] - 2 * q[0] * q[3]
+        R[0, 2] = 2 * q[1] * q[3] + 2 * q[0] * q[2]
+
+        R[1, 0] = 2 * q[1] * q[2] + 2 * q[0] * q[3]
+        R[1, 1] = q[0] * q[0] - q[1] * q[1] + q[2] * q[2] - q[3] * q[3]
+        R[1, 2] = 2 * q[2] * q[3] - 2 * q[0] * q[1]
+
+        R[2, 0] = 2 * q[1] * q[3] - 2 * q[0] * q[2]
+        R[2, 1] = 2 * q[2] * q[3] + 2 * q[0] * q[1]
+        R[2, 2] = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]
+        return R
+
+
+
+

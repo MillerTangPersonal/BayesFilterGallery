@@ -18,12 +18,12 @@ class RTS_Smoother_2D:
         self.Ppr_f  = np.zeros((K, 3, 3))
         self.Ppo_f  = np.zeros((K, 3, 3))
         self.Ppo    = np.zeros((K, 3, 3))          # final posterior covariance
-
-        self.robot = robot
         # initial state and covariance
         self.Ppr_f[0,:,:] = P0
         # save the forward Jacobian (will be used for the backward pass)
         self.F = np.zeros((K, 3, 3))
+
+        self.robot = robot
         self.Kmax = K
 
     '''compute ev_k'''

@@ -65,8 +65,7 @@ if __name__ == "__main__":
     # RTS smoother
     smoother = RTS_Smoother_2D(P0, robot, K)
 
-    # compute the operating point initially
-    # compute operating points
+    # compute the operating point initially with dead-reckoning
     x_dr = np.zeros((3*K, 1))    # column vector
     x_dr[0:3] = X0.reshape(-1,1)
     for k in range(1, K):     # k = 1 : K-1 
