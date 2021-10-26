@@ -193,7 +193,7 @@ class RTS_Smoother_3D:
             self.pert_po[k-1,:] = np.squeeze(d_pert_hat)
             
             # compute the final Ppo. (Barfoot book Appendix A.3.2)
-
+            self.Ppo[k-1,:,:] = self.Ppo_f[k-1,:,:] + PAP.dot(self.Ppo[k,:,:] - self.Ppr_f[k,:,:]).dot(PAP.T)
 
 
 

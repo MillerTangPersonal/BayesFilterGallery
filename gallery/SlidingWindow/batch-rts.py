@@ -46,15 +46,13 @@ if __name__ == "__main__":
     # total timestamp
     K = t.shape[0];        T = 0.1  # time duration, 10 Hz
     # initial position 
-    X0 = vicon_gt[0,:]
-    # initial covariance
-    P0 = np.diag([0.0001, 0.0001, 0.0001])
+    X_init = vicon_gt[0,:]
     # input noise
     Q = np.diag([v_var[0,0], om_var[0,0]])
     # meas. noise
     R = np.diag([r_var[0,0], b_var[0,0]])
     # filter the measurements
-    r_max = 1                                         
+    r_max = 5                                         
     for i in range(r_meas.shape[0]):
         for j in range(r_meas.shape[1]):
             if r_meas[i,j] > r_max:
@@ -63,11 +61,11 @@ if __name__ == "__main__":
     # ground robot
     robot = GroundRobot(Q, R, d, l ,T)
     # RTS smoother
-    smoother = RTS_Smoother_2D(P0, robot, K)
+    smoother = RTS_Smoother_2D(robot, K)
 
     # compute the operating point initially with dead-reckoning
     x_dr = np.zeros((3*K, 1))    # column vector
-    x_dr[0:3] = X0.reshape(-1,1)
+    x_dr[0:3] = X_init.reshape(-1,1)
     for k in range(1, K):     # k = 1 : K-1 
         # compute operating point x_op (dead reckoning)
         x_dr[3*k : 3*k+3] = robot.motion_model(x_dr[3*k-3 : 3*k], v[k], om[k])
@@ -80,10 +78,12 @@ if __name__ == "__main__":
     # (1) do one batch estimation for dx 
     # (2) update the operating point x_op
     # (3) check the convergence
-    iter = 0;       max_iter = 100; 
+    iter = 0;       max_iter = 10; 
     delta_px = 1;   delta_py = 1; delta_an = 1; 
     x_op = np.copy(x_dr)
-
+    # initial state and covariance
+    X0 = np.zeros((1,3))
+    P0 = np.diag([0.0001, 0.0001, 0.0001])
     alpha = 0.8;  
     while (iter < max_iter) and ((delta_px > 0.001) or (delta_py > 0.001) or (delta_an > 0.001)):
         iter = iter + 1; 
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation
 
-        smoother.forward(x_op, v, om, r_meas, b_meas)
+        smoother.forward(X0, P0, x_op, v, om, r_meas, b_meas)
 
         smoother.backward()
 
@@ -129,7 +129,8 @@ if __name__ == "__main__":
         # delta_px = x_error 
         # delta_py = y_error 
         # delta_an = an_error 
-
+        X0 = smoother.dXpo[0,:]
+        P0 = smoother.Ppo[0,:,:]
         print("pos. x error: {0}, pos. y error: {1} angle error: {2}".format(delta_px, delta_py, delta_an))
 
     # ------- End GN -------- #

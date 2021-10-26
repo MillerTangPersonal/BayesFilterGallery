@@ -9,7 +9,7 @@ from util import wrapToPi
 
 class RTS_Smoother_2D:
     '''initialization'''
-    def __init__(self, P0, robot, K):
+    def __init__(self, robot, K):
         # in nonlinear batch estimation,
         # we use GN to compute dx and update to the operating points until convergence  
         self.dXpr_f = np.zeros((K, 3))
@@ -19,7 +19,7 @@ class RTS_Smoother_2D:
         self.Ppo_f  = np.zeros((K, 3, 3))
         self.Ppo    = np.zeros((K, 3, 3))          # final posterior covariance
         # initial state and covariance
-        self.Ppr_f[0,:,:] = P0
+        # self.Ppr_f[0,:,:] = P0
         # save the forward Jacobian (will be used for the backward pass)
         self.F = np.zeros((K, 3, 3))
 
@@ -34,7 +34,10 @@ class RTS_Smoother_2D:
         return ev_k
 
     '''forward pass'''
-    def forward(self, x_op, v, om, r_meas, b_meas):
+    def forward(self, X0, P0, x_op, v, om, r_meas, b_meas):
+        # init. state and covariance
+        self.dXpr_f[0,:] = np.squeeze(X0)
+        self.Ppr_f[0,:,:] = P0
         # loop over all timestamp
         # note: careful about k = 0
         for k in range(self.Kmax):               # k = 0 ~ K-1

@@ -33,7 +33,37 @@ def getGroundtruth(K, theta_vk_i, r_i_vk_i):
 
     return C_gt, r_gt
 
-def visual_results(C_gt, r_gt, C_op, r_op):
+def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
+
+    Er     = np.zeros((3,K))
+    Eth    = np.zeros((3,K))
+    var_r  = np.zeros((3,K))
+    var_th = np.zeros((3,K))
+    var_r_f  = np.zeros((3,K))
+    var_th_f = np.zeros((3,K))
+
+
+    for k in range(K):
+        Er[:,k] = np.squeeze(r_op[k,:] - r_gt[k,:])
+        delta_theta_skew = np.eye(3) - (C_op[k,:,:].dot(C_gt[k,:,:].T))
+        Eth[0,k] = delta_theta_skew[2,1]; 
+        Eth[1,k] = delta_theta_skew[0,2]; 
+        Eth[2,k] = delta_theta_skew[1,0]; 
+
+        var_r[0,k] = math.sqrt(smoother.Ppo[k,0,0])
+        var_r[1,k] = math.sqrt(smoother.Ppo[k,1,1])
+        var_r[2,k] = math.sqrt(smoother.Ppo[k,2,2])
+        var_th[0,k] = math.sqrt(smoother.Ppo[k,3,3])
+        var_th[1,k] = math.sqrt(smoother.Ppo[k,4,4])
+        var_th[2,k] = math.sqrt(smoother.Ppo[k,5,5])
+
+        var_r_f[0,k] = math.sqrt(smoother.Ppo_f[k,0,0])
+        var_r_f[1,k] = math.sqrt(smoother.Ppo_f[k,1,1])
+        var_r_f[2,k] = math.sqrt(smoother.Ppo_f[k,2,2])
+        var_th_f[0,k] = math.sqrt(smoother.Ppo_f[k,3,3])
+        var_th_f[1,k] = math.sqrt(smoother.Ppo_f[k,4,4])
+        var_th_f[2,k] = math.sqrt(smoother.Ppo_f[k,5,5])
+
     fig = plt.figure(facecolor="white")
     ax_t = fig.add_subplot(111, projection = '3d')
     # make the panes transparent
@@ -46,7 +76,7 @@ def visual_results(C_gt, r_gt, C_op, r_op):
     ax_t.zaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
     
     ax_t.plot(r_gt[:,0],r_gt[:,1],r_gt[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
-    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'DR Traj.')
+    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
 
     # use LaTeX fonts in the plot
     ax_t.set_xlabel(r'X [m]',fontsize=FONTSIZE, linespacing=30.0)
@@ -55,6 +85,63 @@ def visual_results(C_gt, r_gt, C_op, r_op):
     ax_t.legend(loc='best', fontsize=FONTSIZE)
     ax_t.view_init(24, -58)
     ax_t.set_box_aspect((1, 1, 0.5))  # xy aspect ratio is 1:1, but change z axis
+
+
+    fig1 = plt.figure(facecolor="white")
+    ax1 = fig1.add_subplot(111)
+    ax1.plot(t,Er[0,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,3*var_r[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,-3*var_r[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,-3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in x")
+
+    fig2 = plt.figure(facecolor="white")
+    ax2 = fig2.add_subplot(111)
+    ax2.plot(t,Er[1,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,3*var_r[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,-3*var_r[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,-3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in y")
+
+    fig3 = plt.figure(facecolor="white")
+    ax3 = fig3.add_subplot(111)
+    ax3.plot(t,Er[2,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,3*var_r[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,-3*var_r[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,-3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in z")
+
+
+    fig4 = plt.figure(facecolor="white")
+    ax4 = fig4.add_subplot(111)
+    ax4.plot(t,Eth[0,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,3*var_th[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,-3*var_th[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,-3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in theta 1")
+
+    fig5 = plt.figure(facecolor="white")
+    ax5 = fig5.add_subplot(111)
+    ax5.plot(t,Eth[1,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,3*var_th[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,-3*var_th[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,-3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in theta 2")
+
+    fig6 = plt.figure(facecolor="white")
+    ax6 = fig6.add_subplot(111)
+    ax6.plot(t,Eth[2,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,3*var_th[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,-3*var_th[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,-3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in theta 3")
+
     plt.show()
 
 if __name__ == "__main__":
@@ -192,7 +279,7 @@ if __name__ == "__main__":
             print("Converged!\n")
 
     # visualize
-    visual_results(C_gt, r_gt, C_op, r_op)
+    visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K)
 
 
 
