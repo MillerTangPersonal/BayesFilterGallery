@@ -6,11 +6,12 @@ from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import matplotlib
 import math
-
-from robot3d_model import Robot3D
+from scipy import linalg
+from robot_model_3d import Robot3D
 from rts_smoother_3d import RTS_Smoother_3D
 
-from so3_util import axisAngle_to_Rot, getTrans
+from so3_util import axisAngle_to_Rot, getTrans, getTrans_in, skew, circle
+np.set_printoptions(precision=4)
 
 FONTSIZE = 18;   TICK_SIZE = 16
 matplotlib.rc('xtick', labelsize=TICK_SIZE) 
@@ -24,7 +25,6 @@ matplotlib.rc('ytick', labelsize=TICK_SIZE)
 
 
 def getGroundtruth(K, theta_vk_i, r_i_vk_i):
-
     C_gt = np.zeros((K, 3, 3))
     r_gt = np.zeros((K, 3))
     for k in range(K):
@@ -44,8 +44,9 @@ def visual_results(C_gt, r_gt, C_op, r_op):
     ax_t.xaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
     ax_t.yaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
     ax_t.zaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
-    # ax_t.plot(r_gt[:,0],r_gt[:,1],r_gt[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
-    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
+    
+    ax_t.plot(r_gt[:,0],r_gt[:,1],r_gt[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
+    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'DR Traj.')
 
     # use LaTeX fonts in the plot
     ax_t.set_xlabel(r'X [m]',fontsize=FONTSIZE, linespacing=30.0)
@@ -55,7 +56,6 @@ def visual_results(C_gt, r_gt, C_op, r_op):
     ax_t.view_init(24, -58)
     ax_t.set_box_aspect((1, 1, 0.5))  # xy aspect ratio is 1:1, but change z axis
     plt.show()
-
 
 if __name__ == "__main__":
     # load data
@@ -78,11 +78,10 @@ if __name__ == "__main__":
     cu = loadmat(curr+'/dataset3.mat')['cu'];                    cv = loadmat(curr+'/dataset3.mat')['cv']
     b  = loadmat(curr+'/dataset3.mat')['b']; 
 
-
     # window
     w1 = 1214;        w2 = 1714  # Matlab: 1215 ~ 1714 --> Python: 1214 ~ 1713, set w2 = 1714 sinec a[w1:w2] doesn't get a[w2]
     # complete data   
-    w1 = 0;           w2 = 1900  
+    # w1 = 0;           w2 = 1900  
 
     # Data Process
     t = t[0, w1 : w2];                   t = t - t[0]          # reset timestamp
@@ -96,16 +95,17 @@ if __name__ == "__main__":
     C_gt, r_gt = getGroundtruth(K, theta_vk_i, r_i_vk_i)
 
     # compute input and meas. variance
-    R = np.diag(y_var)              # measurement covariance
+    R = np.diag(np.squeeze(y_var))              # measurement covariance
     var_imu = np.concatenate((v_var,w_var), axis=0)
-    Q = np.diag(v_var)              # imu noise, Qi = Q * dt**2 
+    Q = np.diag(np.squeeze(var_imu))              # imu noise, Qi = Q * dt**2 
     # create robot
-    robot = Robot3D(Q, R, C_c_v, rho_v_c_v, fu, fv, cu, cv, b)
+    robot = Robot3D(Q, R, C_c_v, rho_v_c_v, fu, fv, cu, cv, b, rho_i_pj_i)
 
-    # init. covariance
+    # init. state and covariance
+    X0 = np.zeros((6,1))
     P0 = np.eye(6) * 0.0001
     # create RTS-smoother
-    smoother = RTS_Smoother_3D(P0, robot, K)
+    smoother = RTS_Smoother_3D(robot, K)
 
     # compute the operating point initially with dead-reckoning
     C_op = np.zeros((K, 3, 3))    # rotation matrix
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     C_op[0,:,:] = C_gt[0,:,:];   
     r_op[0,:]   = r_gt[0,:];  
     T_op[0,:,:] = getTrans(C_op[0,:,:], r_op[0,:])
-    # dead reckoning
+    # dead reckoning: T_op
     for k in range(1, K):
         # input v(k-1)
         v_k = v_vk_vk_i[:,k-1];    w_k = w_vk_vk_i[:,k-1]
@@ -125,8 +125,71 @@ if __name__ == "__main__":
         # compute the operating point for transformation matrix T_op
         T_op[k,:,:] = getTrans(C_op[k,:,:], r_op[k,:])
 
-    x_dr = np.zeros((6*K, 1))     # column vector
-    # x_dr[0:6] = 
+
+    # Gauss-Newton 
+    # in each iteration, 
+    # (1) do one batch estimation for dx 
+    # (2) update the operating point x_op
+    # (3) check the convergence
+    iter = 0;       max_iter = 10; 
+    delta_p = 1;    T_final = np.zeros((K, 4, 4))
+
+    C_prev = np.zeros((K,3,3))
+    r_prev = np.zeros((K,3))
+    dr_step = np.zeros((K,3))
+    dtheta_step = np.zeros((K,3))
+
+    label = 1
+
+    while (iter < max_iter) and (label != 0):
+        iter = iter + 1 
+        print("\nIteration: #{0}\n".format(iter))
+        # full batch estimation using RTS-smoother
+        # RTS forward
+        smoother.forward(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)
+        # RTS backward
+        smoother.backward()
+
+        # update operating point
+        for k in range(K):
+            perturb = smoother.pert_po[k,:]
+            rho = perturb[0:3].reshape(-1,1)
+            phi = perturb[3:6]
+            phi_skew = skew(phi)
+            zeta = np.block([
+                [phi_skew, rho],
+                [0,  0,  0,  0]
+                ])
+            Psi = linalg.expm(zeta)
+            T_final[k,:,:] = Psi.dot(T_op[k,:,:])
+
+            T_k = T_final[k,:,:]
+            # update C_op, r_op
+            C_op[k,:,:] = T_k[0:3,0:3]
+            r_op[k,:]   = -1.0 * np.squeeze((C_op[k,:,:].T).dot(T_k[0:3,3].reshape(-1,1)))
+
+            T_prev = T_op[k,:,:]
+            C_prev[k,:,:] = T_prev[0:3, 0:3]
+            r_prev[k,:]   = -1.0 * np.squeeze((C_prev[k,:,:].T).dot(T_prev[0:3,3].reshape(-1,1)))
+
+            dr_step[k,:]  = np.squeeze(r_op[k,:].reshape(-1,1) - r_prev[k,:].reshape(-1,1))
+
+            delta_theta_skew = np.eye(3) - C_op[k,:,:].dot(C_prev[k,:,:].T)
+
+            dtheta_step[k,0] = delta_theta_skew[2,1]
+            dtheta_step[k,1] = delta_theta_skew[0,2]
+            dtheta_step[k,2] = delta_theta_skew[1,0]
+
+        # update init. state
+        X0 = np.block([dr_step[0,:], dtheta_step[0,:]]).reshape(-1,1)
+        P0 = smoother.Ppo[0,:,:]
+        # update T_op
+        T_op = np.copy(T_final)              # need to use np.copy()
+
+        label = np.sum(dr_step > 0.001)
+        print(label)
+        if label == 0:
+            print("Converged!\n")
 
     # visualize
     visual_results(C_gt, r_gt, C_op, r_op)

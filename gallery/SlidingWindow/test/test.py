@@ -14,4 +14,7 @@ r = r.reshape(-1,1)
 
 T = np.block([[C,  -C.dot(r)],
                 [0, 0, 0, 1]])
-print(T)
+
+G = T[0:3,0:3]
+r = T[0:3,3]
+print(r)
