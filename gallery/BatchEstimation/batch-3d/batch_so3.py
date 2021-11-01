@@ -168,7 +168,7 @@ if __name__ == "__main__":
     # window
     w1 = 1214;        w2 = 1714  # Matlab: 1215 ~ 1714 --> Python: 1214 ~ 1713, set w2 = 1714 sinec a[w1:w2] doesn't get a[w2]
     # complete data   
-    # w1 = 0;           w2 = 1900  
+    # w1 = 1214;           w2 = 1220
 
     # Data Process
     t = t[0, w1 : w2];                   t = t - t[0]          # reset timestamp
@@ -233,7 +233,10 @@ if __name__ == "__main__":
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation using RTS-smoother
         # RTS forward
-        smoother.forward(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)
+        #smoother.forward(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)
+
+        smoother.forward_old(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)    # original forward pass
+
         # RTS backward
         smoother.backward()
 
@@ -273,7 +276,7 @@ if __name__ == "__main__":
         # update T_op
         T_op = np.copy(T_final)              # need to use np.copy()
 
-        label = np.sum(dr_step > 0.001)
+        label = np.sum(dr_step > 0.01)
         print(label)
         if label == 0:
             print("Converged!\n")

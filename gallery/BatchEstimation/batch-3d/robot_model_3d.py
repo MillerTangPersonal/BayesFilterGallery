@@ -42,9 +42,10 @@ class Robot3D:
 
 
     '''compute motion model Jacobian'''
-    def compute_F(self, C_op_k_1, r_op_k_1, C_op_k, r_op_k):
-        T = getTrans(C_op_k_1, r_op_k_1)
-        T_in = getTrans_in(C_op_k, r_op_k)
+    def compute_F(self,  C_op_k1, r_op_k1, C_op_k, r_op_k):
+        # C_op_k1, r_op_k1 are C and r at timestep: k-1
+        T = getTrans(C_op_k, r_op_k)
+        T_in = getTrans_in(C_op_k1, r_op_k1)
         tau = T.dot(T_in)
         C_now = tau[0:3, 0:3]
         r_now = tau[0:3, 3]

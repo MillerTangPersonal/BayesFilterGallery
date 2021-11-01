@@ -85,8 +85,83 @@ class RTS_Smoother_3D:
         err_y = y_k_j.reshape(-1,1) - y_o
         return err_y
 
+
     '''forward pass'''
     def forward(self, X0, P0, C_op, r_op, v_data, w_data, y_data, t):
+        # init. state and covariance
+        self.pert_pr_f[0,:] = np.squeeze(X0)
+        self.Ppr_f[0,:,:] = P0
+        # loop over all timesteps
+        for k in range(self.Kmax):
+            if k == 0:
+                C_op_k = C_op[0,:,:];     r_op_k = r_op[0,:]
+            else:
+                # operating point
+                C_op_k = C_op[k,:,:];     r_op_k  = r_op[k,:]      # timestep k
+                C_op_k1 = C_op[k-1,:,:];  r_op_k1 = r_op[k-1,:]    # timestep k-1
+
+                # input data
+                v_data_k = v_data[:,k];   w_data_k = w_data[:,k]   # input at timestep k
+                
+                dt = t[k] - t[k-1]
+                Qv_k = self.robot.nv_prop(dt)
+
+                # compute ev_k 
+                rho, phi = self.compute_ev_k(dt, v_data_k, w_data_k, C_op_k1, r_op_k1, C_op_k, r_op_k)
+                # compute F_k
+                F_k = self.robot.compute_F(C_op_k1, r_op_k1, C_op_k, r_op_k)
+                self.F[k-1,:,:] = F_k
+
+            # measurements
+            G = np.empty((0,6));    ey_k = np.empty(0);    Rk_y = np.empty((0,0))
+            for j in range(20):
+                cond = np.sum(y_data[:,k,j] == -1)    # if meas. invalid, all elements are -1, cond = 4
+                if (cond == 0):
+                    P_opt = self.robot.compute_point(C_op_k, r_op_k, j)
+                    G_i = self.robot.compute_G(C_op_k, r_op_k, j, P_opt)
+
+                    e_y_i = self.compute_ey_k(y_data[:,k,j], P_opt)
+
+                    ey_k = np.append(ey_k, np.squeeze(e_y_i))
+
+                    Rk_y = block_diag(Rk_y, self.robot.Rm)
+
+                    G = np.concatenate((G, G_i), axis=0)
+
+            # forward equations
+            if G.size == 0:  # no valid meas.
+                if k!=0:
+                    # equ. 1
+                    self.Ppr_f[k,:,:] = F_k.dot(self.Ppo_f[k-1,:,:]).dot(F_k.T) + Qv_k
+                    # equ. 2
+                    pert_pr_f_k = F_k.dot(self.pert_po_f[k-1,:].reshape(-1,1)) + np.block([rho, phi]).reshape(-1,1)
+                    self.pert_pr_f[k,:] = np.squeeze(pert_pr_f_k) 
+
+                # no meas. to update
+                self.Ppo_f[k,:,:] = self.Ppr_f[k,:,:]
+                self.pert_po_f[k,:] = self.pert_pr_f[k,:]
+            else:     
+                # update with measurements
+                if k!=0:
+                    # equ. 1
+                    self.Ppr_f[k,:,:] = F_k.dot(self.Ppo_f[k-1,:,:]).dot(F_k.T) + Qv_k
+                    # equ. 2
+                    pert_pr_f_k = F_k.dot(self.pert_po_f[k-1,:].reshape(-1,1)) + np.block([rho, phi]).reshape(-1,1)
+                    self.pert_pr_f[k,:] = np.squeeze(pert_pr_f_k) 
+
+                # equ. 3
+                GM = G.dot(self.Ppr_f[k,:,:]).dot(G.T) + Rk_y
+                K_k = self.Ppr_f[k,:,:].dot(G.T).dot(linalg.inv(GM))
+                # equ. 4
+                self.Ppo_f[k,:,:] = (np.eye(6) - K_k.dot(G)).dot(self.Ppr_f[k,:,:])
+                # equ. 5
+                in_err = ey_k.reshape(-1,1) - G.dot(self.pert_pr_f[k,:].reshape(-1,1))
+                pert_hat = self.pert_pr_f[k,:].reshape(-1,1) + K_k.dot(in_err)
+                self.pert_po_f[k,:] = np.squeeze(pert_hat)
+
+
+    '''forward pass'''
+    def forward_old(self, X0, P0, C_op, r_op, v_data, w_data, y_data, t):
         # init. state and covariance
         self.pert_pr_f[0,:] = np.squeeze(X0)
         self.Ppr_f[0,:,:] = P0
@@ -100,7 +175,7 @@ class RTS_Smoother_3D:
             C_op_k = C_op[k,:,:];     r_op_k = r_op[k,:]
             C_op_k_1 = C_op[k+1,:,:]; r_op_k_1 = r_op[k+1,:]
 
-            F_k = self.robot.compute_F(C_op_k_1, r_op_k_1, C_op_k, r_op_k)
+            F_k = self.robot.compute_F(C_op_k, r_op_k, C_op_k_1, r_op_k_1)
             self.F[k,:,:] = F_k
             # compute ev_k
             rho, phi = self.compute_ev_k(dt, v_data[:,k+1], w_data[:,k+1], C_op_k, r_op_k, C_op_k_1, r_op_k_1)
@@ -143,6 +218,7 @@ class RTS_Smoother_3D:
         # init
         G = np.empty((0,6));  ey_k = np.empty(0);  Rk_y = np.empty((0,0))
         k_end = self.Kmax-1
+        C_op_k = C_op[k_end,:,:];     r_op_k = r_op[k_end,:]
         for j in range(20):
             cond = np.sum(y_data[:,k_end,j] == -1)   # if meas. invalid, all elements are -1, cond = 4
             if (cond == 0):
