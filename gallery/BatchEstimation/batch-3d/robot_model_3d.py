@@ -41,7 +41,7 @@ class Robot3D:
         return C_new, r_new
 
 
-    '''compute motion model Jacobian'''
+    '''compute motion model Jacobian in Batch estimation'''
     def compute_F(self,  C_op_k1, r_op_k1, C_op_k, r_op_k):
         # C_op_k1, r_op_k1 are C and r at timestep: k-1
         T = getTrans(C_op_k, r_op_k)
@@ -55,8 +55,21 @@ class Robot3D:
         return F
 
     '''measurement model'''
-    def meas_model(self,):
-        pass
+    def meas_model(self, P_opt):
+        P_opt = np.squeeze(P_opt)
+        vec = np.array([
+            self.fu*P_opt[0],
+            self.fv*P_opt[1],
+            self.fu*(P_opt[0] - self.b),
+            self.fv*P_opt[1]
+        ]).reshape(-1,1)
+
+        vec_c = np.array([self.cu, 
+                          self.cv, 
+                          self.cu, 
+                          self.cv]).reshape(-1,1)
+        y_o = (1.0/P_opt[2]) * vec + vec_c
+        return y_o
 
     '''compute meas. motion Jacobian'''
     def compute_G(self, C_op_k, r_op_k, idx, P_opt):

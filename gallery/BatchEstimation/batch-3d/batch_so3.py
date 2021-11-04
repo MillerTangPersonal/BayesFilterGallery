@@ -78,6 +78,11 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax_t.plot(r_gt[:,0],r_gt[:,1],r_gt[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
     ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
 
+    print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[%.3f]"%(
+        np.mean(r_gt[:,0] - r_op[:,0]), np.std(r_gt[:,0] - r_op[:,0]),
+        np.mean(r_gt[:,1] - r_op[:,1]), np.std(r_gt[:,1] - r_op[:,1]),
+        np.mean(r_gt[:,2] - r_op[:,2]), np.std(r_gt[:,2] - r_op[:,2])))
+
     # use LaTeX fonts in the plot
     ax_t.set_xlabel(r'X [m]',fontsize=FONTSIZE, linespacing=30.0)
     ax_t.set_ylabel(r'Y [m]',fontsize=FONTSIZE, linespacing=30.0)

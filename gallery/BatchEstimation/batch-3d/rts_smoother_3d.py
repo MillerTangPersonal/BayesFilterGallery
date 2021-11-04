@@ -28,7 +28,8 @@ class RTS_Smoother_3D:
         self.Kmax = K
 
     '''compute ev_k'''
-    def compute_ev_k(self, dt, v_k_1, w_k_1, C_op_k, r_op_k, C_op_k_1, r_op_k_1):
+    def compute_ev_k(self, dt, v_k_1, w_k_1, C_op_k1, r_op_k1, C_op_k, r_op_k):
+        # compute ln(...)^{v}
         input = np.array([-v_k_1, -w_k_1]).reshape(-1,1)
         rho = input[0:3].reshape(-1,1)
         phi = input[3:6]
@@ -38,11 +39,12 @@ class RTS_Smoother_3D:
             [0,  0,  0,  0]
             ])
         Psi = linalg.expm(dt*zeta)
-        T = getTrans(C_op_k, r_op_k)
-        T_in = getTrans_in(C_op_k_1, r_op_k_1)
+        T = getTrans(C_op_k1, r_op_k1)
+        T_in = getTrans_in(C_op_k, r_op_k)
         tau = Psi.dot(T).dot(T_in)
         C_now = tau[0:3, 0:3]
         r_now = tau[0:3, 3]
+        # Equ. (60) to compute J. Then, J * rho = r
         # could be done by eigenvalue
         axisAngle = axis_angle_from_matrix(C_now)
         axisAngle = np.squeeze(axisAngle)
@@ -60,29 +62,19 @@ class RTS_Smoother_3D:
 
         # J * rho_now = r_now
         r_now = r_now.reshape(-1,1)
-        rho_now = np.linalg.solve(J, r_now)
+        rho_now = np.linalg.solve(J, r_now)      
         phi_now = axisAngle[3] * a
 
         rho_now = np.squeeze(rho_now)
         phi_now = np.squeeze(phi_now)
         return rho_now, phi_now
 
-
+    '''compute ey_k'''
     def compute_ey_k(self, y_k_j, P_opt):
-        P_opt = np.squeeze(P_opt)
-        vec = np.array([
-            self.robot.fu*P_opt[0],
-            self.robot.fv*P_opt[1],
-            self.robot.fu*(P_opt[0] - self.robot.b),
-            self.robot.fv*P_opt[1]
-        ]).reshape(-1,1)
-
-        vec_c = np.array([self.robot.cu, 
-                          self.robot.cv, 
-                          self.robot.cu, 
-                          self.robot.cv]).reshape(-1,1)
-        y_o = (1.0/P_opt[2]) * vec + vec_c
-        err_y = y_k_j.reshape(-1,1) - y_o
+        # get the meas. from meas. model
+        y_o = self.robot.meas_model(P_opt)
+        # compute error in y
+        err_y = y_k_j.reshape(-1,1) - y_o.reshape(-1,1)
         return err_y
 
 
@@ -160,7 +152,33 @@ class RTS_Smoother_3D:
                 self.pert_po_f[k,:] = np.squeeze(pert_hat)
 
 
-    '''forward pass'''
+    '''backward pass'''
+    def backward(self):
+        for k in range(self.Kmax-1, 0, -1):    # k = K-1 ~ 1
+            # init
+            if k == self.Kmax-1:
+                self.pert_po[k,:] = self.pert_po_f[k,:]
+                pert_hat = self.pert_po_f[k,:].reshape(-1,1)
+
+                self.Ppo[k,:,:] = self.Ppo_f[k,:,:]
+            else:
+                # pert_po[k,:] computed from last iteration
+                pert_hat = self.pert_po[k,:].reshape(-1,1)
+
+            d_pert = pert_hat - self.pert_pr_f[k,:].reshape(-1,1)
+
+            PAP = self.Ppo_f[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr_f[k,:,:]))
+
+            d_pert_hat = self.pert_po_f[k-1,:].reshape(-1,1) + PAP.dot(d_pert)
+
+            self.pert_po[k-1,:] = np.squeeze(d_pert_hat)
+            
+            # compute the final Ppo. (Barfoot book Appendix A.3.2)
+            self.Ppo[k-1,:,:] = self.Ppo_f[k-1,:,:] + PAP.dot(self.Ppo[k,:,:] - self.Ppr_f[k,:,:]).dot(PAP.T)
+
+
+
+    '''forward pass (old)'''
     def forward_old(self, X0, P0, C_op, r_op, v_data, w_data, y_data, t):
         # init. state and covariance
         self.pert_pr_f[0,:] = np.squeeze(X0)
@@ -245,32 +263,3 @@ class RTS_Smoother_3D:
             in_err = ey_k.reshape(-1,1) - G.dot(self.pert_pr_f[k_end,:].reshape(-1,1))
             pert_hat = self.pert_pr_f[k_end,:].reshape(-1,1) + K_k.dot(in_err)
             self.pert_po_f[k_end,:] = np.squeeze(pert_hat)
-
-    '''backward pass'''
-    def backward(self):
-
-        for k in range(self.Kmax-1, 0, -1):    # k = K-1 ~ 1
-            # init
-            if k == self.Kmax-1:
-                self.pert_po[k,:] = self.pert_po_f[k,:]
-                pert_hat = self.pert_po_f[k,:].reshape(-1,1)
-
-                self.Ppo[k,:,:] = self.Ppo_f[k,:,:]
-            else:
-                # pert_po[k,:] computed from last iteration
-                pert_hat = self.pert_po[k,:].reshape(-1,1)
-
-            d_pert = pert_hat - self.pert_pr_f[k,:].reshape(-1,1)
-
-            PAP = self.Ppo_f[k-1,:,:].dot(self.F[k-1,:,:].T).dot(linalg.inv(self.Ppr_f[k,:,:]))
-
-            d_pert_hat = self.pert_po_f[k-1,:].reshape(-1,1) + PAP.dot(d_pert)
-
-            self.pert_po[k-1,:] = np.squeeze(d_pert_hat)
-            
-            # compute the final Ppo. (Barfoot book Appendix A.3.2)
-            self.Ppo[k-1,:,:] = self.Ppo_f[k-1,:,:] + PAP.dot(self.Ppo[k,:,:] - self.Ppr_f[k,:,:]).dot(PAP.T)
-
-
-
-

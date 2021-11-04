@@ -10,7 +10,6 @@ from scipy import linalg
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.style as style
 from tkinter.filedialog import askopenfilename
 from pyquaternion import Quaternion      # package for quaternion
 from ekf_util import isin, cross, update_state
