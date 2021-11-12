@@ -1,14 +1,10 @@
 '''
-main file for eskf estimation
-used for the real data collected from CF_Bolt
+main file for eskf estimation for simulation (without lever-arm)
 '''
 #!/usr/bin/env python3
 import argparse
 import os, sys
 import rosbag
-from cf_msgs.msg import Accel, Gyro, Flow, Tdoa, Tof 
-from geometry_msgs.msg import PoseWithCovarianceStamped
-from sensor_msgs.msg import Imu
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import linalg
@@ -32,60 +28,48 @@ def isin(t_np,t_k):
     b = False
     return 0, b
 
-
-if __name__ == "__main__":
-    # load data
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-i', action='store', nargs=2)
-    args = parser.parse_args()
-    
-    # access the survey results
-    anchor_npz = args.i[0]
-    anchor_survey = np.load(anchor_npz)
-    # select anchor constellations
-    anchor_position = anchor_survey['an_pos']
-    # print out
-    anchor_file = os.path.split(sys.argv[-2])[1]
-    print("\nselecting anchor constellation " + str(anchor_file) + "\n")
-
+if __name__ == "__main__":    
+    # anchor positions (simulated)
+    anchor_position = np.array([[ 4.0,  4.3,  3.0],
+                                [-4.0,  4.3,  3.0],
+                                [ 4.0, -4.3,  3.0],
+                                [-4.0, -4.3,  3.0],
+                                [ 4.0,  4.3,  0.1],
+                                [-4.0,  4.3,  0.1],
+                                [ 4.0, -4.3,  0.1],
+                                [-4.0, -4.3,  0.1]])
     # access rosbag file
-    ros_bag = args.i[1]
+    ros_bag = "sim_data.bag"    # without lever-arm
     bag = rosbag.Bag(ros_bag)
-    bagFile = os.path.split(sys.argv[-1])[1]
-    # print out
-    bag_name = os.path.splitext(bagFile)[0]
-    print("visualizing rosbag: " + str(bagFile) + "\n")
-
     # -------------------- start extract the rosbag ------------------------ #
-    pos_vicon=[];      t_vicon=[]; 
-    uwb=[];            t_uwb=[]; 
-    imu=[];            t_imu=[]; 
-    for topic, msg, t in bag.read_messages(['/pose_data', '/tdoa_data', '/imu_data']):
-        if topic == '/pose_data':
-            pos_vicon.append([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z])
-            t_vicon.append(msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9)
-        if topic == '/tdoa_data':
-            uwb.append([msg.idA, msg.idB, msg.data])
-            t_uwb.append(msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9)
-        if topic == '/imu_data':
-            imu.append([msg.linear_acceleration.x, msg.linear_acceleration.y,  msg.linear_acceleration.z,\
-                        msg.angular_velocity.x,    msg.angular_velocity.y,     msg.angular_velocity.z     ])
-            t_imu.append(msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9)
+    gt_pos = []; gt_quat=[]; t_gt_pose = []
+    imu = []; t_imu = []; uwb = []; t_uwb = []
 
+    for topic, msg, t in bag.read_messages(["/firefly/ground_truth/pose", "/firefly/imu", "/uwb_tdoa"]):
+        if topic == '/firefly/ground_truth/pose':
+            gt_pos.append([msg.position.x,  msg.position.y,  msg.position.z])
+            gt_quat.append([msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z])
+            t_gt_pose.append(t.secs + t.nsecs * 1e-9)
+        if topic == '/firefly/imu':
+            # imu unit: m/s^2 in acc, rad/sec in gyro
+            imu.append([msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z,
+                        msg.angular_velocity.x,    msg.angular_velocity.y,    msg.angular_velocity.z])
+            t_imu.append(msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9)       
+        if topic == '/uwb_tdoa':
+            uwb.append([msg.id_A, msg.id_B, msg.dist_diff])
+            t_uwb.append(msg.stamp.secs + msg.stamp.nsecs * 1e-9)
 
-    min_t = min(t_uwb + t_imu + t_vicon)
+    min_t = min(t_imu + t_uwb)
     # get the vicon information from min_t
-    t_vicon = np.array(t_vicon);              
-    idx = np.argwhere(t_vicon > min_t);     
-    t_vicon = t_vicon[idx]; 
-    pos_vicon = np.squeeze(np.array(pos_vicon)[idx,:])
+    t_gt_pose = np.array(t_gt_pose); idx = np.argwhere(t_gt_pose > min_t); t_gt_pose = t_gt_pose[idx]
+    gt_pos = np.array(gt_pos)[idx,:];    gt_pos = np.squeeze(gt_pos)
+    gt_quat = np.array(gt_quat)[idx,:];  gt_quat = np.squeeze(gt_quat)
 
     # sensor
-    t_imu = np.array(t_imu);       imu = np.array(imu);  
-    t_uwb = np.array(t_uwb);       uwb = np.array(uwb);     
-
+    t_uwb = np.array(t_uwb);  t_imu = np.array(t_imu)
+    uwb = np.array(uwb);      imu = np.array(imu)
     # reset ROS time base
-    t_vicon = (t_vicon - min_t).reshape(-1,1)
+    t_gt_pose = (t_gt_pose - min_t).reshape(-1,1)
     t_imu = (t_imu - min_t).reshape(-1,1)
     t_uwb = (t_uwb - min_t).reshape(-1,1)
 
@@ -95,11 +79,22 @@ if __name__ == "__main__":
     t = np.unique(time)
     K = t.shape[0]
 
+    # Initial estimate for the state vector
+    X0 = np.zeros((6,1))        
+    X0[0] = 1.5;  X0[1] = 0.0;  X0[2] = 1.5
+    q0 = Quaternion([1,0,0,0])  # initial quaternion
+    # Initial posterior covariance
+    std_xy0 = 0.1;       std_z0 = 0.1;      std_vel0 = 0.1
+    std_rp0 = 0.1;       std_yaw0 = 0.1
+    P0 = np.diag([std_xy0**2,  std_xy0**2,  std_z0**2,\
+                std_vel0**2, std_vel0**2, std_vel0**2,\
+                std_rp0**2,  std_rp0**2,  std_yaw0**2 ])
     # create the object of ESKF
-    eskf = ESKF(K)
+    eskf = ESKF(X0, q0, P0, K)
 
     print('timestep: %f' % K)
     print('\nStart state estimation')
+    
     for k in range(1,K):               # k = 1 ~ K-1
         # Find what measurements are available at the current time (help function: isin() )
         imu_k,  imu_check  = isin(t_imu,   t[k-1])
@@ -108,7 +103,6 @@ if __name__ == "__main__":
 
         # ESKF Prediction
         eskf.predict(imu[imu_k,:], dt, imu_check, k)
-        
         # ESKF Correction
         if uwb_check:            # if we have UWB measurement
             eskf.UWB_correct(uwb[uwb_k,:], anchor_position, k)
@@ -117,9 +111,9 @@ if __name__ == "__main__":
 
     ## compute the error    
     # interpolate Vicon measurements
-    f_x = interpolate.splrep(t_vicon, pos_vicon[:,0], s = 0)
-    f_y = interpolate.splrep(t_vicon, pos_vicon[:,1], s = 0)
-    f_z = interpolate.splrep(t_vicon, pos_vicon[:,2], s = 0)
+    f_x = interpolate.splrep(t_gt_pose, gt_pos[:,0], s = 0.5)
+    f_y = interpolate.splrep(t_gt_pose, gt_pos[:,1], s = 0.5)
+    f_z = interpolate.splrep(t_gt_pose, gt_pos[:,2], s = 0.5)
     x_interp = interpolate.splev(t, f_x, der = 0)
     y_interp = interpolate.splev(t, f_y, der = 0)
     z_interp = interpolate.splev(t, f_z, der = 0)
@@ -141,7 +135,9 @@ if __name__ == "__main__":
     print('The overall RMS error of position estimation is %f [m]\n' % RMS_all)
 
     # visualization
-    plot_pos(t, eskf.Xpo, t_vicon, pos_vicon)
+    plot_pos(t, eskf.Xpo, t_gt_pose, gt_pos)
     plot_pos_err(t, pos_error, eskf.Ppo)
-    plot_traj(pos_vicon, eskf.Xpo, anchor_position)
+    plot_traj(gt_pos, eskf.Xpo, anchor_position)
     plt.show()
+
+

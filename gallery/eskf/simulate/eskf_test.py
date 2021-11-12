@@ -1,6 +1,6 @@
 '''
 test eskf for ros simulation
-no lever-arm --> select the data "sim_ekf_test.bag"
+no lever-arm --> select the data "sim_data.bag"
 '''
 import rosbag, sys
 import time, os
@@ -234,15 +234,7 @@ for k in range(len(t)-1):                 # k = 0 ~ N-1
         dz0 = Xpr[k,2] - an_0[2];  dz1 = Xpr[k,2] - an_1[2]
         dis_0 = linalg.norm(an_0 - Xpr[k,0:3])   
         dis_1 = linalg.norm(an_1 - Xpr[k,0:3])
-        predicted = dis_1 - dis_0                  
-        # debug: use gt to fake a TDOA meas
-        # note: t[k-1] = t_tdoa[uwb_k,0]
-        # tag_x_gt = np.interp(t[k-1], t_gt_pose[:,0], gt_pos[:,0])
-        # tag_y_gt = np.interp(t[k-1], t_gt_pose[:,0], gt_pos[:,1])
-        # tag_z_gt = np.interp(t[k-1], t_gt_pose[:,0], gt_pos[:,2])
-        # tag = np.array([tag_x_gt, tag_y_gt, tag_z_gt])
-        # tdoa_meas_fake = linalg.norm(an_1 - tag) - linalg.norm(an_0 - tag)
-        
+        predicted = dis_1 - dis_0                          
         err_uwb = tdoa[uwb_k, 2] - predicted   # error is large at the beginning
         
         # err_uwb = tdoa_meas_fake - predicted

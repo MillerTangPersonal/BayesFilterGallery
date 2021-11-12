@@ -1,6 +1,6 @@
 '''
 test eskf for ros simulation
-with lever-arm --> select the data "simData.bag"
+with lever-arm --> select the data "simData_lever_arm.bag"
 '''
 import rosbag, sys
 import time, os
