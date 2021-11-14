@@ -91,3 +91,9 @@ def plot_traj(pos_vicon, Xpo, anchor_pos):
     ax_t.set_zlabel(r'Z [m]')
     plt.title(r"Trajectory of the experiment", fontsize=13, fontweight=0, color='black', style='italic', y=1.02 )
     
+def plot_bias(t, bias, id):
+    fig_b = plt.figure(facecolor="white")
+    ax_b = fig_b.add_subplot(111)
+    ax_b.plot(t, bias, color='orangered',linewidth=1.9,alpha=1.0)
+    plt.title(r"Est. bias, id: {0}".format(id), fontsize=13, fontweight=0, color='black', style='italic', y=1.02 )
+    plt.ylim(0.0, 1.3)

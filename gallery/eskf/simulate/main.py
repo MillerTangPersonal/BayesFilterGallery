@@ -14,7 +14,7 @@ from scipy import interpolate
 from sklearn.metrics import mean_squared_error
 
 from eskf_class import ESKF
-from plot_util import plot_pos, plot_pos_err, plot_traj
+from plot_util import plot_bias, plot_pos, plot_pos_err, plot_traj
 
 '''help function for timestamp'''
 def isin(t_np,t_k):
@@ -73,6 +73,32 @@ if __name__ == "__main__":
     t_imu = (t_imu - min_t).reshape(-1,1)
     t_uwb = (t_uwb - min_t).reshape(-1,1)
 
+    # simuate biases: add a constant bias for 8 anchors
+    for i in range(t_uwb.shape[0]):
+        if uwb[i,0]==7 and uwb[i,1]==0:
+            uwb[i,2] = uwb[i,2] + 0.3
+
+        elif uwb[i,0]==0 and uwb[i,1]==1:
+            uwb[i,2] = uwb[i,2] + 0.4
+
+        elif uwb[i,0]==1 and uwb[i,1]==2:
+            uwb[i,2] = uwb[i,2] + 0.5
+
+        elif uwb[i,0]==2 and uwb[i,1]==3:
+            uwb[i,2] = uwb[i,2] + 0.6
+
+        elif uwb[i,0]==3 and uwb[i,1]==4:
+            uwb[i,2] = uwb[i,2] + 0.7
+
+        elif uwb[i,0]==4 and uwb[i,1]==5:
+            uwb[i,2] = uwb[i,2] + 0.8
+
+        elif uwb[i,0]==5 and uwb[i,1]==6:
+            uwb[i,2] = uwb[i,2] + 0.9
+
+        elif uwb[i,0]==6 and uwb[i,1]==7:
+            uwb[i,2] = uwb[i,2] + 1.0
+
     # ----------------------- INITIALIZATION OF EKF -------------------------#
     # Create a compound vector t with a sorted merge of all the sensor time bases
     time = np.sort(np.concatenate((t_imu, t_uwb)))
@@ -80,21 +106,26 @@ if __name__ == "__main__":
     K = t.shape[0]
 
     # Initial estimate for the state vector
-    X0 = np.zeros((6,1))        
+    X0 = np.zeros((14,1))        
     X0[0] = 1.5;  X0[1] = 0.0;  X0[2] = 1.5
+    # bias parameters (initialize)
+    X0[6] = 0.3;   X0[7] = 0.4;  X0[8] = 0.5;  X0[9] = 0.6; 
+    X0[10] = 0.7;  X0[11]= 0.8;  X0[12]= 0.9;  X0[13]=1.0    
+
     q0 = Quaternion([1,0,0,0])  # initial quaternion
     # Initial posterior covariance
     std_xy0 = 0.1;       std_z0 = 0.1;      std_vel0 = 0.1
-    std_rp0 = 0.1;       std_yaw0 = 0.1
-    P0 = np.diag([std_xy0**2,  std_xy0**2,  std_z0**2,\
-                std_vel0**2, std_vel0**2, std_vel0**2,\
-                std_rp0**2,  std_rp0**2,  std_yaw0**2 ])
+    std_rp0 = 0.1;       std_yaw0 = 0.1;    std_bias = 0.1 # UWB bias
+    P0 = np.diag([std_xy0**2,  std_xy0**2,  std_z0**2,  \
+                  std_vel0**2, std_vel0**2, std_vel0**2,\
+                  std_rp0**2,  std_rp0**2,  std_yaw0**2, \
+                  std_bias**2, std_bias**2, std_bias**2, std_bias**2, std_bias**2, std_bias**2, std_bias**2, std_bias**2 ])
     # create the object of ESKF
     eskf = ESKF(X0, q0, P0, K)
 
     print('timestep: %f' % K)
     print('\nStart state estimation')
-    
+
     for k in range(1,K):               # k = 1 ~ K-1
         # Find what measurements are available at the current time (help function: isin() )
         imu_k,  imu_check  = isin(t_imu,   t[k-1])
@@ -138,6 +169,11 @@ if __name__ == "__main__":
     plot_pos(t, eskf.Xpo, t_gt_pose, gt_pos)
     plot_pos_err(t, pos_error, eskf.Ppo)
     plot_traj(gt_pos, eskf.Xpo, anchor_position)
+
+
+    for id in range(8):
+        plot_bias(t,eskf.Xpo[:,6+id], id)
+
     plt.show()
 
 
