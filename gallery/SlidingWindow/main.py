@@ -4,31 +4,22 @@ Batch estimation for UWB TDOA using Lie group
 import rosbag
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import linalg
+from scipy import linalg, stats
 import math
 from pyquaternion import Quaternion
 from scipy import interpolate            
 from sklearn.metrics import mean_squared_error
 
+from drone_model import DroneModel
+from rts_smoother_3d import RTS_Smoother_3D
+from so3_util import axisAngle_to_Rot, getTrans, skew
+
+# help function in EKF
 from eskf_class_la import ESKF
 from plot_util import plot_pos, plot_pos_err, plot_traj
 
-''' help function'''
-def interp_meas(t1, meas1, t2):
-    f_meas1 = interpolate.splrep(t1, meas1, s = 0.5)
-    # synchronized meas 1 w.r.t. t2
-    syn_m1 = interpolate.splev(t2, f_meas1, der = 0)
-    return syn_m1
-
-def synchnize_imu(t_imu, imu, t_uwb):
-    acc_x  = interp_meas(t_imu, imu[:,0], t_uwb).reshape(-1,1)
-    acc_y  = interp_meas(t_imu, imu[:,1], t_uwb).reshape(-1,1)
-    acc_z  = interp_meas(t_imu, imu[:,2], t_uwb).reshape(-1,1)
-    gyro_x = interp_meas(t_imu, imu[:,3], t_uwb).reshape(-1,1)
-    gyro_y = interp_meas(t_imu, imu[:,4], t_uwb).reshape(-1,1)
-    gyro_z = interp_meas(t_imu, imu[:,5], t_uwb).reshape(-1,1)
-    imu_syn = np.concatenate((acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z), axis = 1)
-    return imu_syn
+# fix random seed
+np.random.seed(7)
 
 def isin(t_np,t_k):
     # check if t_k is in the numpy array t_np. 
@@ -45,7 +36,7 @@ def eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos):
     K = t.shape[0]
     # Initial estimate for the state vector
     X0 = np.zeros((6,1))        
-    X0[0] = 0.0;  X0[1] = 0.0;  X0[2] = 1.0
+    X0[0] = 1.5;  X0[1] = 0.0;  X0[2] = 1.5
     q0 = Quaternion([1,0,0,0])  # initial quaternion
     # Initial posterior covariance
     std_xy0 = 0.1;       std_z0 = 0.1;      std_vel0 = 0.1
@@ -100,70 +91,224 @@ def eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos):
     plot_traj(gt_pos, eskf.Xpo, anchor_position)
     plt.show()
 
+def visual_traj(gt_pos, r_op):
+    fig = plt.figure(facecolor="white")
+    ax_t = fig.add_subplot(111, projection = '3d')
+    # make the panes transparent
+    ax_t.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax_t.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax_t.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # change the color of the grid lines 
+    ax_t.xaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
+    ax_t.yaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
+    ax_t.zaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
+    
+    ax_t.plot(gt_pos[:,0],gt_pos[:,1], gt_pos[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
+    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
+    plt.show()
+
+'''help function'''
+def zeta(phi):
+    phi_norm = np.linalg.norm(phi)
+    if phi_norm == 0:
+        dq = np.array([1, 0, 0, 0])
+    else:
+        dq_xyz = (phi*(math.sin(0.5*phi_norm)))/phi_norm
+        dq = np.array([math.cos(0.5*phi_norm), dq_xyz[0], dq_xyz[1], dq_xyz[2]])
+    return dq
+
+'''update operating point'''
+def update_op(smoother, T_op, T_final, dr_step, dtheta_step, K):
+    for k in range(K):
+        perturb = smoother.pert_po[k,:]
+        rho = perturb[0:3].reshape(-1,1)
+        phi = perturb[3:6]
+        phi_skew = skew(phi)
+        zeta = np.block([
+            [phi_skew, rho],
+            [0,  0,  0,  0]
+            ])
+        Psi = linalg.expm(zeta)
+        T_final[k,:,:] = Psi.dot(T_op[k,:,:])
+
+        T_k = T_final[k,:,:]
+        # update C_op, r_op
+        C_op[k,:,:] = T_k[0:3,0:3]
+        r_op[k,:]   = -1.0 * np.squeeze((C_op[k,:,:].T).dot(T_k[0:3,3].reshape(-1,1)))
+
+        T_prev = T_op[k,:,:]
+        C_prev[k,:,:] = T_prev[0:3, 0:3]
+        r_prev[k,:]   = -1.0 * np.squeeze((C_prev[k,:,:].T).dot(T_prev[0:3,3].reshape(-1,1)))
+
+        dr_step[k,:]  = np.squeeze(r_op[k,:].reshape(-1,1) - r_prev[k,:].reshape(-1,1))
+
+        delta_theta_skew = np.eye(3) - C_op[k,:,:].dot(C_prev[k,:,:].T)
+
+        dtheta_step[k,0] = delta_theta_skew[2,1]
+        dtheta_step[k,1] = delta_theta_skew[0,2]
+        dtheta_step[k,2] = delta_theta_skew[1,0]
+
+    # update init. state
+    X0 = np.block([dr_step[0,:], dtheta_step[0,:]]).reshape(-1,1)
+    P0 = smoother.Ppo[0,:,:]
+    # update T_op
+    T_op = np.copy(T_final)              # need to use np.copy()
+    return X0, P0, T_op, dr_step
 
 if __name__ == "__main__":    
-    # anchor positions (simulated)
-    anchor_position = np.array([[ 4.0,  4.3,  3.0],
-                                [-4.0,  4.3,  3.0],
-                                [ 4.0, -4.3,  3.0],
-                                [-4.0, -4.3,  3.0],
-                                [ 4.0,  4.3,  0.1],
-                                [-4.0,  4.3,  0.1],
-                                [ 4.0, -4.3,  0.1],
-                                [-4.0, -4.3,  0.1]])
+    # load data
+    data = np.load("data_npz/sim_uwb_batch2.npz")
+    t = data["t"];         imu = data["imu_syn"];      uwb = data["uwb"]
+    t_gt = data["t_gt"];   gt_pos = data["gt_pos"];    gt_quat = data["gt_quat"]
+    An = data["An"]; 
 
+    # ground truth odometry as input     
+    odom = data["odom"] 
 
-    # access rosbag file
-    ros_bag = "sim-data/simData_lever_arm.bag"       # with lever-arm
-    bag = rosbag.Bag(ros_bag)
+    # ----------- apply ESKF ----------- #
+    # eskf_est(t, imu, uwb, An, t_gt, gt_pos)
 
-    # -------------------- start extract the rosbag ------------------------ #
-    gt_pos = [];    gt_quat=[];    t_gt_pose = []
-    imu = [];       t_imu = [];    uwb = [];       t_uwb = []
-    for topic, msg, t in bag.read_messages(["/firefly/ground_truth/pose", "/firefly/imu", "/uwb_tdoa"]):
-        if topic == '/firefly/ground_truth/pose':
-            gt_pos.append([msg.position.x,  msg.position.y,  msg.position.z])
-            gt_quat.append([msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z])
-            t_gt_pose.append(t.secs + t.nsecs * 1e-9)
-        if topic == '/firefly/imu':
-            # imu unit: m/s^2 in acc, rad/sec in gyro
-            imu.append([msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z,
-                        msg.angular_velocity.x,    msg.angular_velocity.y,    msg.angular_velocity.z])
-            t_imu.append(msg.header.stamp.secs + msg.header.stamp.nsecs * 1e-9)       
-        if topic == '/uwb_tdoa':
-            uwb.append([msg.id_A, msg.id_B, msg.dist_diff])
-            t_uwb.append(msg.stamp.secs + msg.stamp.nsecs * 1e-9)
+    # ----- debug ----- #
+    DEBUG = False
 
-    # sensor
-    t_uwb = np.array(t_uwb);  t_imu = np.array(t_imu)
-    uwb = np.array(uwb);      imu = np.array(imu)
-
-    # synchronize IMU data to UWB time
-    imu_syn = synchnize_imu(t_imu, imu, t_uwb)
-
-    # visual syn
-    # fig = plt.figure(facecolor="white")
-    # ax = fig.add_subplot(111)
-    # ax.plot(t_imu, imu[:,0], linestyle="dashed", color='orangered',linewidth=1.9,alpha=1.0)
-    # ax.plot(t_uwb, imu_syn[:,0], color='blue',linewidth=1.9,alpha=1.0)
-    # plt.show()
-
-    t = t_uwb
-    min_t = min(t)
-    # get the vicon information from min_t
-    t_gt_pose = np.array(t_gt_pose); idx = np.argwhere(t_gt_pose > min_t); t_gt_pose = t_gt_pose[idx]
-    gt_pos = np.array(gt_pos)[idx,:];    gt_pos = np.squeeze(gt_pos)
-    gt_quat = np.array(gt_quat)[idx,:];  gt_quat = np.squeeze(gt_quat)
-
-    # reset ROS time base
-    t_gt_pose = (t_gt_pose - min_t).reshape(-1,1)
-    t = (t - min_t).reshape(-1,1)
-
+    K = t.shape[0]
+    acc = imu[0:K,0:3].T;                           # linear acceleration, shape(3,K), unit m/s^2
+    gyro = imu[0:K,3:].T;                           # rotational velocity, shape(3,K), unit rad/s
+    g = np.array([0.0, 0.0, -9.8]).reshape(-1,1)      # gravity in inertial frame
     # --------- compute the input data ----------- #
     # IMU measurements: 
     # acc: m/s^2    acc. in x, y, and z 
     # gyro: rad/s   angular velocity 
+    v_vk_vk_i = np.zeros((3, K))          # translation velocity of vehicle frame with respect to inertial frame, expressed in vehicle frame 
+    q_list = np.zeros((K,4))              # quaternion list
+    R_list = np.zeros((K,3,3))            # Rotation matrix list (from body frame to inertial frame) 
+    q_list[0,:] = np.array([1.0, 0.0, 0.0, 0.0])
+    R_list[0,:,:] = np.eye(3)
+    # compute the v_vk_vk_i (imu dea reckoning drifts quickly)
+    for idx in range(1,K):
+        # compute dt
+        dt = t[idx] - t[idx-1] 
+        # rotation from inertial to body frame (to convert g to body frame)
+        R_iv = R_list[idx-1,:,:]
+        C_vi = R_iv.T
+        # compute input v_k 
+        v_vk_vk_i[:, idx] = v_vk_vk_i[:,idx-1] + (acc[:,idx-1] + np.squeeze(C_vi.dot(g))) * dt
+
+        # quaternion prop. (dead reckoning) 
+        # problem #1: gryo[2,:] and odom[:,5] are different. The DR drifts very quickly. 
+        # dw   = gyro[:,idx-1] * dt     
+        # the difference between gyro[:,idx-1] and odom[idx-1,3:6]) are [0.001, -0.0004, -0.0008]
+        dw = odom[idx-1,3:6] * dt
+        dqk  = Quaternion(zeta(dw))           # convert incremental rotation vector to quaternion
+        dR = dqk.rotation_matrix
+        R_list[idx,:,:] = R_iv.dot(dR)
+
+    if DEBUG:
+        fig = plt.figure(facecolor="white")
+        ax = fig.add_subplot(311)
+        ax.plot(t[0:K], gyro[0,:])
+        ax.plot(t[0:K], odom[:,3],'--')
+        plt.ylim(-0.1, 0.1)
+        bx = fig.add_subplot(312)
+        bx.plot(t[0:K], gyro[1,:])
+        bx.plot(t[0:K], odom[:,4],'--')
+        plt.ylim(-0.1, 0.1)
+        cx = fig.add_subplot(313)
+        cx.plot(t[0:K], gyro[2,:])
+        cx.plot(t[0:K], odom[:,5],'--')
+        plt.ylim(-0.1, 0.1)
+
+        fig1 = plt.figure(facecolor="white")
+        ax1 = fig1.add_subplot(311)
+        ax1.plot(t[0:K], v_vk_vk_i[0,:])
+        ax1.plot(t[0:K], odom[:,0],'--')
+        bx1 = fig1.add_subplot(312)
+        bx1.plot(t[0:K], v_vk_vk_i[1,:])
+        bx1.plot(t[0:K], odom[:,1],'--')
+        cx1 = fig1.add_subplot(313)
+        cx1.plot(t[0:K], v_vk_vk_i[2,:])
+        cx1.plot(t[0:K], odom[:,2],'--')
+        plt.show()
+
+    # ---------- create quadrotor model ------------ #
+    Q = np.diag([0.04, 0.04, 0.04, 0.04, 0.04, 0.04])  
+    R = 0.05 # UWB meas. variance
+    # --- external calibration --- #
+    # rotation from vehicel frame to UWB frame
+    C_u_v = np.eye(3)      # uwb don't have orientation
+    # translation vector from vehicle frame to UWB frame
+    rho_v_u_v =  np.array([-0.01245, 0.00127, 0.0908]).reshape(-1,1) 
+    drone = DroneModel(Q, R, C_u_v, rho_v_u_v, An)
+
+    # init. state and covariance
+    X0 = np.zeros((6,1))
+    P0 = np.eye(6) * 0.0001
+
+    # ----------- create RTS-smoother ----------- #
+    smoother = RTS_Smoother_3D(drone, K)
+
+    # compute the operating point initially with dead-reckoning
+    C_op = np.zeros((K, 3, 3))              # rotation matrix
+    r_op = np.zeros((K, 3))                 # translation vector
+    T_op = np.zeros((K, 4, 4))              # transformation matrix
+    
+    # init
+    C_op[0,:,:] = np.eye(3)                 # init. rotation 
+    # r_op[0,:] = np.array([0.0,0.0,1.0])   # init. translation  (with level arm)
+    r_op[0,:] = np.array([1.5,0.0,1.5])     # init. translation  (without level arm)
+    T_op[0,:,:] = getTrans(C_op[0,:,:], r_op[0,:])
+    # dead reckoning: T_op
+    for k in range(1,K):
+        # input v(k-1) (computed)
+        # v_k = v_vk_vk_i[:,k-1];  w_k = odom[k-1,3:6]
+
+        # the gt imu is also biased around 0.001
+        # w_k = gyro[:, k-1]; 
+
+        # using gt odomety, we have very good dead reckoning. (consider to add noise on the gt inputs)
+        # we add noise to the ground truth input (translation velocity, angular velocity)
+        Norm = stats.norm(0, 0.2)
+
+        v_k = odom[k-1,0:3] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()])) 
+        w_k = odom[k-1,3:6] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()]))
+
+        # compute dt
+        dt = t[k] - t[k-1]
+        C_op[k,:,:], r_op[k,:] = drone.motion_model(C_op[k-1,:,:], r_op[k-1,:], v_k, w_k, dt)
+        # compute the operating point for transformation matrix T_op
+        T_op[k,:,:] = getTrans(C_op[k,:,:], r_op[k,:])
 
 
-    # try EKF
-    eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos)
+    # Gauss-Newton 
+    # in each iteration, 
+    # (1) do one batch estimation for dx 
+    # (2) update the operating point x_op
+    # (3) check the convergence
+    iter = 0;       max_iter = 10; 
+    delta_p = 1;    T_final = np.zeros((K, 4, 4))
+
+    C_prev = np.zeros((K,3,3))
+    r_prev = np.zeros((K,3))
+    dr_step = np.zeros((K,3))
+    dtheta_step = np.zeros((K,3))
+
+    label = 1
+
+    while (iter < max_iter) and (label != 0):
+        iter = iter + 1
+        print("\nIteration: #{0}\n".format(iter))
+        # full batch estimation using RTS-smoother
+        # RTS forward 
+
+        # RTS backward
+
+        # update operating point
+        X0, P0, T_op, dr_step = update_op(smoother, T_op, T_final, dr_step, dtheta_step, K)
+
+        label = np.sum(dr_step > 0.01)
+        print(label)
+        if label == 0:
+            print("Converged!\n")
+
+    # check the dead reckoning
+    visual_traj(gt_pos, r_op)

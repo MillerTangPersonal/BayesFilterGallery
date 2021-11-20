@@ -64,7 +64,7 @@ class ESKF:
             # We have a new IMU measurement
             # update the prior Xpr based on accelerometer and gyroscope data
             omega_k = imu[3:]                 # * DEG_TO_RAD        # in simulation, gyro is rad/sec
-            self.omega[k] = omega_k
+            self.omega[k] = omega_k           # save and is used when no imu data case
             Vpo = self.Xpo[k-1,3:6]
             # Acc: G --> m/s^2
             f_k = imu[0:3]                    # * GRAVITY_MAGNITUDE  # in simulation, acc is in m/s^2

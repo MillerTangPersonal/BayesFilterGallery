@@ -149,6 +149,44 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
 
     plt.show()
 
+# help function
+def update_op(smoother, T_op, T_final, dr_step, dtheta_step, K):
+    for k in range(K):
+        perturb = smoother.pert_po[k,:]
+        rho = perturb[0:3].reshape(-1,1)
+        phi = perturb[3:6]
+        phi_skew = skew(phi)
+        zeta = np.block([
+            [phi_skew, rho],
+            [0,  0,  0,  0]
+            ])
+        Psi = linalg.expm(zeta)
+        T_final[k,:,:] = Psi.dot(T_op[k,:,:])
+
+        T_k = T_final[k,:,:]
+        # update C_op, r_op
+        C_op[k,:,:] = T_k[0:3,0:3]
+        r_op[k,:]   = -1.0 * np.squeeze((C_op[k,:,:].T).dot(T_k[0:3,3].reshape(-1,1)))
+
+        T_prev = T_op[k,:,:]
+        C_prev[k,:,:] = T_prev[0:3, 0:3]
+        r_prev[k,:]   = -1.0 * np.squeeze((C_prev[k,:,:].T).dot(T_prev[0:3,3].reshape(-1,1)))
+
+        dr_step[k,:]  = np.squeeze(r_op[k,:].reshape(-1,1) - r_prev[k,:].reshape(-1,1))
+
+        delta_theta_skew = np.eye(3) - C_op[k,:,:].dot(C_prev[k,:,:].T)
+
+        dtheta_step[k,0] = delta_theta_skew[2,1]
+        dtheta_step[k,1] = delta_theta_skew[0,2]
+        dtheta_step[k,2] = delta_theta_skew[1,0]
+
+    # update init. state
+    X0 = np.block([dr_step[0,:], dtheta_step[0,:]]).reshape(-1,1)
+    P0 = smoother.Ppo[0,:,:]
+    # update T_op
+    T_op = np.copy(T_final)              # need to use np.copy()
+    return X0, P0, T_op, dr_step
+
 if __name__ == "__main__":
     # load data
     os.chdir("/home/wenda/BayesFilterGallery/dataset/textbook-data")   
@@ -179,7 +217,20 @@ if __name__ == "__main__":
     t = t[0, w1 : w2];                   t = t - t[0]          # reset timestamp
     theta_vk_i = theta_vk_i[:, w1:w2];   r_i_vk_i = r_i_vk_i[:,w1:w2]
     # inputs
-    v_vk_vk_i = v_vk_vk_i[:, w1:w2];     w_vk_vk_i = w_vk_vk_i[:, w1:w2]; 
+    v_vk_vk_i = v_vk_vk_i[:, w1:w2];     w_vk_vk_i = w_vk_vk_i[:, w1:w2];
+
+    # ----- debug ----- #
+    DEBUG = False
+    if DEBUG:
+        fig1 = plt.figure(facecolor="white")
+        ax1 = fig1.add_subplot(311)
+        ax1.plot(t, v_vk_vk_i[0,:])
+        bx1 = fig1.add_subplot(312)
+        bx1.plot(t, v_vk_vk_i[1,:])
+        cx1 = fig1.add_subplot(313)
+        cx1.plot(t, v_vk_vk_i[2,:])
+        plt.show()
+
     # measurements
     y_k_j = y_k_j[:,w1:w2,:]
     # total number of timestamp
@@ -238,48 +289,15 @@ if __name__ == "__main__":
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation using RTS-smoother
         # RTS forward
-        #smoother.forward(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)
+        smoother.forward(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)
 
-        smoother.forward_old(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)    # original forward pass
+        # smoother.forward_old(X0, P0, C_op, r_op, v_vk_vk_i, w_vk_vk_i, y_k_j, t)    # original forward pass
 
         # RTS backward
         smoother.backward()
 
         # update operating point
-        for k in range(K):
-            perturb = smoother.pert_po[k,:]
-            rho = perturb[0:3].reshape(-1,1)
-            phi = perturb[3:6]
-            phi_skew = skew(phi)
-            zeta = np.block([
-                [phi_skew, rho],
-                [0,  0,  0,  0]
-                ])
-            Psi = linalg.expm(zeta)
-            T_final[k,:,:] = Psi.dot(T_op[k,:,:])
-
-            T_k = T_final[k,:,:]
-            # update C_op, r_op
-            C_op[k,:,:] = T_k[0:3,0:3]
-            r_op[k,:]   = -1.0 * np.squeeze((C_op[k,:,:].T).dot(T_k[0:3,3].reshape(-1,1)))
-
-            T_prev = T_op[k,:,:]
-            C_prev[k,:,:] = T_prev[0:3, 0:3]
-            r_prev[k,:]   = -1.0 * np.squeeze((C_prev[k,:,:].T).dot(T_prev[0:3,3].reshape(-1,1)))
-
-            dr_step[k,:]  = np.squeeze(r_op[k,:].reshape(-1,1) - r_prev[k,:].reshape(-1,1))
-
-            delta_theta_skew = np.eye(3) - C_op[k,:,:].dot(C_prev[k,:,:].T)
-
-            dtheta_step[k,0] = delta_theta_skew[2,1]
-            dtheta_step[k,1] = delta_theta_skew[0,2]
-            dtheta_step[k,2] = delta_theta_skew[1,0]
-
-        # update init. state
-        X0 = np.block([dr_step[0,:], dtheta_step[0,:]]).reshape(-1,1)
-        P0 = smoother.Ppo[0,:,:]
-        # update T_op
-        T_op = np.copy(T_final)              # need to use np.copy()
+        X0, P0, T_op, dr_step = update_op(smoother, T_op, T_final, dr_step, dtheta_step, K)
 
         label = np.sum(dr_step > 0.01)
         print(label)
