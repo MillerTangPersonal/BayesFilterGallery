@@ -25,14 +25,14 @@ def skew(r):
                        [-r[1],  r[0],    0.0]], dtype=float)
     return r_skew
 
-'''compute transformation matrix from C and r'''
+'''compute transformation matrix from C and r (from inertial to vehicle --> system state)'''
 def getTrans(C, r):
     r = r.reshape(-1,1)
     T = np.block([[C,    -C.dot(r)],
                   [0,  0,  0,  1.0]])
     return T
 
-'''compute the inv. of transformation matrix'''
+'''compute the inv. of transformation matrix (from vehicle to inertial --> useful elements)'''
 def getTrans_in(C, r):
     r = r.reshape(-1,1)
     T_in = np.block([[C.T,          r],

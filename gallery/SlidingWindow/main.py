@@ -257,6 +257,9 @@ if __name__ == "__main__":
     # r_op[0,:] = np.array([0.0,0.0,1.0])   # init. translation  (with level arm)
     r_op[0,:] = np.array([1.5,0.0,1.5])     # init. translation  (without level arm)
     T_op[0,:,:] = getTrans(C_op[0,:,:], r_op[0,:])
+
+    v_k = odom[:, 0:3]
+    w_k = odom[:, 3:6]
     # dead reckoning: T_op
     for k in range(1,K):
         # input v(k-1) (computed)
@@ -269,15 +272,17 @@ if __name__ == "__main__":
         # we add noise to the ground truth input (translation velocity, angular velocity)
         Norm = stats.norm(0, 0.2)
 
-        v_k = odom[k-1,0:3] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()])) 
-        w_k = odom[k-1,3:6] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()]))
+        v_k[k-1,:] = odom[k-1,0:3] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()])) 
+        w_k[k-1,:] = odom[k-1,3:6] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()]))
 
         # compute dt
         dt = t[k] - t[k-1]
-        C_op[k,:,:], r_op[k,:] = drone.motion_model(C_op[k-1,:,:], r_op[k-1,:], v_k, w_k, dt)
+        C_op[k,:,:], r_op[k,:] = drone.motion_model(C_op[k-1,:,:], r_op[k-1,:], v_k[k-1], w_k[k-1], dt)
         # compute the operating point for transformation matrix T_op
         T_op[k,:,:] = getTrans(C_op[k,:,:], r_op[k,:])
 
+
+    visual_traj(gt_pos, r_op)
 
     # Gauss-Newton 
     # in each iteration, 
@@ -294,21 +299,25 @@ if __name__ == "__main__":
 
     label = 1
 
+    # uwb meas.
+    y_k = uwb 
+
     while (iter < max_iter) and (label != 0):
         iter = iter + 1
         print("\nIteration: #{0}\n".format(iter))
         # full batch estimation using RTS-smoother
         # RTS forward 
-
+        smoother.forward(X0, P0, C_op, r_op, v_k, w_k, y_k, t)
         # RTS backward
+        smoother.backward()
 
         # update operating point
         X0, P0, T_op, dr_step = update_op(smoother, T_op, T_final, dr_step, dtheta_step, K)
 
-        label = np.sum(dr_step > 0.01)
+        label = np.sum(dr_step > 0.005)
         print(label)
         if label == 0:
             print("Converged!\n")
 
-    # check the dead reckoning
+    # visual batch estimation results
     visual_traj(gt_pos, r_op)
