@@ -3,6 +3,7 @@ Batch estimation for UWB TDOA using Lie group
 '''
 import rosbag
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 from scipy import linalg, stats
 import math
@@ -20,6 +21,10 @@ from plot_util import plot_pos, plot_pos_err, plot_traj
 
 # fix random seed
 np.random.seed(7)
+
+FONTSIZE = 18;   TICK_SIZE = 16
+matplotlib.rc('xtick', labelsize=TICK_SIZE) 
+matplotlib.rc('ytick', labelsize=TICK_SIZE) 
 
 def isin(t_np,t_k):
     # check if t_k is in the numpy array t_np. 
@@ -105,6 +110,122 @@ def visual_traj(gt_pos, r_op):
     
     ax_t.plot(gt_pos[:,0],gt_pos[:,1], gt_pos[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
     ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
+    plt.show()
+
+# need to synchronize so as to compute errors
+def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
+
+    Er     = np.zeros((3,K))
+    Eth    = np.zeros((3,K))
+    var_r  = np.zeros((3,K))
+    var_th = np.zeros((3,K))
+    var_r_f  = np.zeros((3,K))
+    var_th_f = np.zeros((3,K))
+
+    for k in range(K):
+        Er[:,k] = np.squeeze(r_op[k,:] - r_gt[k,:])
+        delta_theta_skew = np.eye(3) - (C_op[k,:,:].dot(C_gt[k,:,:].T))
+        Eth[0,k] = delta_theta_skew[2,1]; 
+        Eth[1,k] = delta_theta_skew[0,2]; 
+        Eth[2,k] = delta_theta_skew[1,0]; 
+
+        var_r[0,k] = math.sqrt(smoother.Ppo[k,0,0])
+        var_r[1,k] = math.sqrt(smoother.Ppo[k,1,1])
+        var_r[2,k] = math.sqrt(smoother.Ppo[k,2,2])
+        var_th[0,k] = math.sqrt(smoother.Ppo[k,3,3])
+        var_th[1,k] = math.sqrt(smoother.Ppo[k,4,4])
+        var_th[2,k] = math.sqrt(smoother.Ppo[k,5,5])
+
+        var_r_f[0,k] = math.sqrt(smoother.Ppo_f[k,0,0])
+        var_r_f[1,k] = math.sqrt(smoother.Ppo_f[k,1,1])
+        var_r_f[2,k] = math.sqrt(smoother.Ppo_f[k,2,2])
+        var_th_f[0,k] = math.sqrt(smoother.Ppo_f[k,3,3])
+        var_th_f[1,k] = math.sqrt(smoother.Ppo_f[k,4,4])
+        var_th_f[2,k] = math.sqrt(smoother.Ppo_f[k,5,5])
+
+    fig = plt.figure(facecolor="white")
+    ax_t = fig.add_subplot(111, projection = '3d')
+    # make the panes transparent
+    ax_t.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax_t.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax_t.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # change the color of the grid lines 
+    ax_t.xaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
+    ax_t.yaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
+    ax_t.zaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
+    
+    ax_t.plot(r_gt[:,0],r_gt[:,1],r_gt[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
+    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
+
+    print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[%.3f]"%(
+        np.mean(r_gt[:,0] - r_op[:,0]), np.std(r_gt[:,0] - r_op[:,0]),
+        np.mean(r_gt[:,1] - r_op[:,1]), np.std(r_gt[:,1] - r_op[:,1]),
+        np.mean(r_gt[:,2] - r_op[:,2]), np.std(r_gt[:,2] - r_op[:,2])))
+
+    # use LaTeX fonts in the plot
+    ax_t.set_xlabel(r'X [m]',fontsize=FONTSIZE, linespacing=30.0)
+    ax_t.set_ylabel(r'Y [m]',fontsize=FONTSIZE, linespacing=30.0)
+    ax_t.set_zlabel(r'Z [m]',fontsize=FONTSIZE, linespacing=30.0)
+    ax_t.legend(loc='best', fontsize=FONTSIZE)
+    ax_t.view_init(24, -58)
+    ax_t.set_box_aspect((1, 1, 0.5))  # xy aspect ratio is 1:1, but change z axis
+
+
+    fig1 = plt.figure(facecolor="white")
+    ax1 = fig1.add_subplot(111)
+    ax1.plot(t,Er[0,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,3*var_r[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,-3*var_r[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    ax1.plot(t,-3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in x")
+
+    fig2 = plt.figure(facecolor="white")
+    ax2 = fig2.add_subplot(111)
+    ax2.plot(t,Er[1,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,3*var_r[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,-3*var_r[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    ax2.plot(t,-3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in y")
+
+    fig3 = plt.figure(facecolor="white")
+    ax3 = fig3.add_subplot(111)
+    ax3.plot(t,Er[2,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,3*var_r[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,-3*var_r[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    ax3.plot(t,-3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in z")
+
+
+    fig4 = plt.figure(facecolor="white")
+    ax4 = fig4.add_subplot(111)
+    ax4.plot(t,Eth[0,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,3*var_th[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,-3*var_th[0,:],color='red',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    ax4.plot(t,-3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in theta 1")
+
+    fig5 = plt.figure(facecolor="white")
+    ax5 = fig5.add_subplot(111)
+    ax5.plot(t,Eth[1,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,3*var_th[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,-3*var_th[1,:],color='red',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    ax5.plot(t,-3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in theta 2")
+
+    fig6 = plt.figure(facecolor="white")
+    ax6 = fig6.add_subplot(111)
+    ax6.plot(t,Eth[2,:],color='steelblue',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,3*var_th[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,-3*var_th[2,:],color='red',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    ax6.plot(t,-3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    plt.title("error in theta 3")
+
     plt.show()
 
 '''help function'''
@@ -319,5 +440,34 @@ if __name__ == "__main__":
         if label == 0:
             print("Converged!\n")
 
+
+
+    # interpolate Vicon measurements
+    f_x = interpolate.splrep(t_gt, gt_pos[:,0], s = 0.5)
+    f_y = interpolate.splrep(t_gt, gt_pos[:,1], s = 0.5)
+    f_z = interpolate.splrep(t_gt, gt_pos[:,2], s = 0.5)
+    x_interp = interpolate.splev(t, f_x, der = 0)
+    y_interp = interpolate.splev(t, f_y, der = 0)
+    z_interp = interpolate.splev(t, f_z, der = 0)
+
+    x_error = r_op[:,0] - np.squeeze(x_interp)
+    y_error = r_op[:,1] - np.squeeze(y_interp)
+    z_error = r_op[:,2] - np.squeeze(z_interp)
+
+    pos_error = np.concatenate((x_error.reshape(-1,1), y_error.reshape(-1,1), z_error.reshape(-1,1)), axis = 1)
+
+    rms_x = math.sqrt(mean_squared_error(x_interp, r_op[:,0]))
+    rms_y = math.sqrt(mean_squared_error(y_interp, r_op[:,1]))
+    rms_z = math.sqrt(mean_squared_error(z_interp, r_op[:,2]))
+    print('The RMS error for position x is %f [m]' % rms_x)
+    print('The RMS error for position y is %f [m]' % rms_y)
+    print('The RMS error for position z is %f [m]' % rms_z)
+
+
     # visual batch estimation results
     visual_traj(gt_pos, r_op)
+    # visual batch estimation results
+    # compute C_gt and r_gt
+    # need to synchronize before compute the error
+    # visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K)
+
