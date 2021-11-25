@@ -7,8 +7,6 @@ import math
 from pyquaternion import Quaternion
 
 # ------------------ parameters ------------------ #
-std_xy0 = 0.1;       std_z0 = 0.1;      std_vel0 = 0.1
-std_rp0 = 0.1;       std_yaw0 = 0.1
 # Process noise
 w_accxyz = 2.0;      w_gyro_rpy = 0.1    # rad/sec
 w_vel = 0;           w_pos = 0;          w_att = 0;        
@@ -17,20 +15,11 @@ GRAVITY_MAGNITUDE = 9.81
 DEG_TO_RAD  = math.pi/180.0
 e3 = np.array([0, 0, 1]).reshape(-1,1)   
 
-# Initial estimate for the state vector
-X0 = np.zeros((6,1))        
-X0[0] = 1.25;  X0[1] = 0.0;  X0[2] = 0.07
-    
-q0 = Quaternion([1,0,0,0])  # initial quaternion
-
-# Initial posterior covariance
-P0 = np.diag([std_xy0**2,  std_xy0**2,  std_z0**2,\
-              std_vel0**2, std_vel0**2, std_vel0**2,\
-              std_rp0**2,  std_rp0**2,  std_yaw0**2 ])
+w_uwb_bias = 4.0;    # process noise for UWB bias
 
 class ESKF:
     '''initialization'''
-    def __init__(self, K):
+    def __init__(self, X0, q0, P0, K):
         # Standard devirations of UWB meas. (tuning parameter)
         self.std_uwb_tdoa = np.sqrt(0.05)
         # external calibration: translation vector from the quadcopter to UWB tag
@@ -42,10 +31,10 @@ class ESKF:
         self.R_list = np.zeros((K,3,3))  # Rotation matrix list (from body frame to inertial frame) 
 
         # nominal-state X = [x, y, z, vx, vy, vz]
-        self.Xpr = np.zeros((K,6))
-        self.Xpo = np.zeros((K,6))
-        self.Ppr = np.zeros((K, 9, 9))
-        self.Ppo = np.zeros((K, 9, 9))
+        self.Xpr = np.zeros((K,14))
+        self.Xpo = np.zeros((K,14))
+        self.Ppr = np.zeros((K, 17, 17))
+        self.Ppo = np.zeros((K, 17, 17))
 
         self.Ppr[0] = P0
         self.Ppo[0] = P0
@@ -56,22 +45,33 @@ class ESKF:
         self.R = q0.rotation_matrix
 
         # # Process noise
-        self.Fi = np.block([
-            [np.zeros((3,3)),   np.zeros((3,3))],
-            [np.eye(3),         np.zeros((3,3))],
-            [np.zeros((3,3)),   np.eye(3)      ]
-        ])
+        # self.Fi = np.block([
+        #     [np.zeros((3,3)),   np.zeros((3,3))],
+        #     [np.eye(3),         np.zeros((3,3))],
+        #     [np.zeros((3,3)),   np.eye(3)      ]
+        # ])
 
+        self.Fi = np.block([
+            [np.zeros((3,14))],
+            [np.eye(14)]
+        ])
     '''ESKF prediction using IMU'''
     def predict(self, imu, dt, imu_check, k):
         # construct noise
         Vi = (w_accxyz**2)*(dt**2)*np.eye(3)
         Thetai = (w_gyro_rpy**2)*(dt**2)*np.eye(3)
+        # Qi = np.block([
+        #     [Vi,               np.zeros((3,3)) ],
+        #     [np.zeros((3,3)),  Thetai          ]
+        # ])
+
+        # uwb bias
+        W_bias = (w_uwb_bias**2)*(dt**2) * np.eye(8)    
         Qi = np.block([
-            [Vi,               np.zeros((3,3)) ],
-            [np.zeros((3,3)),  Thetai          ]
+            [Vi,               np.zeros((3,3)) , np.zeros((3,8))],
+            [np.zeros((3,3)),  Thetai          , np.zeros((3,8))],
+            [np.zeros((8,3)),  np.zeros((8,3)),  W_bias]
         ])
-        
         if imu_check:
             # We have a new IMU measurement
             # update the prior Xpr based on accelerometer and gyroscope data
@@ -86,24 +86,32 @@ class ESKF:
             # position prediction 
             self.Xpr[k,0:3] = self.Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(self.R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
             # velocity prediction
-            self.Xpr[k,3:6] = self.Xpo[k-1, 3:6] + np.squeeze(self.R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
-            # if CF is on the ground
-            if self.Xpr[k, 2] < 0:  
-                self.Xpr[k, 2:6] = np.zeros((1,4))    
+            self.Xpr[k,3:6] = self.Xpo[k-1, 3:6] + np.squeeze(self.R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt  
             # quaternion update
             qk_1 = Quaternion(self.q_list[k-1,:])
             dqk  = Quaternion(self.zeta(dw))           # convert incremental rotation vector to quaternion
             q_pr = qk_1 * dqk                          # compute quaternion multiplication with package
             self.q_list[k,:] = np.array([q_pr.w, q_pr.x, q_pr.y, q_pr.z])  # save quaternion in q_list
             self.R_list[k]   = q_pr.rotation_matrix                        # save rotation prediction to R_list
+
+            # UWB bias prediction 
+            self.Xpr[k,6:14] = self.Xpo[k-1, 6:14] 
+
             # error state covariance matrix 
             # use the rotation matrix from timestep k-1
             self.R = qk_1.rotation_matrix          
+            # # Jacobian matrix
+            # Fx = np.block([
+            #     [np.eye(3),         dt*np.eye(3),      -0.5*dt**2*self.R.dot(self.cross(f_k))],
+            #     [np.zeros((3,3)),   np.eye(3),         -dt*self.R.dot(self.cross(f_k))       ],
+            #     [np.zeros((3,3)),   np.zeros((3,3)),   linalg.expm(self.cross(dw)).T    ]            
+            # ])
             # Jacobian matrix
             Fx = np.block([
-                [np.eye(3),         dt*np.eye(3),      -0.5*dt**2*self.R.dot(self.cross(f_k))],
-                [np.zeros((3,3)),   np.eye(3),         -dt*self.R.dot(self.cross(f_k))       ],
-                [np.zeros((3,3)),   np.zeros((3,3)),   linalg.expm(self.cross(dw)).T    ]            
+                [np.eye(3),         dt*np.eye(3),      -0.5*dt**2*self.R.dot(self.cross(f_k)), np.zeros((3,8))],
+                [np.zeros((3,3)),   np.eye(3),         -dt*self.R.dot(self.cross(f_k))       , np.zeros((3,8))],
+                [np.zeros((3,3)),   np.zeros((3,3)),   linalg.expm(self.cross(dw)).T         , np.zeros((3,8))],
+                [np.zeros((8,3)),   np.zeros((8,3)),   np.zeros((8,3))                       , np.eye(8)]            
             ])
             # Process noise matrix Fi, Qi are defined above
             self.Ppr[k] = Fx.dot(self.Ppo[k-1]).dot(Fx.T) + self.Fi.dot(Qi).dot(self.Fi.T) 
@@ -125,16 +133,16 @@ class ESKF:
             self.Xpr[k,0:3] = self.Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(self.R.dot(self.f[k].reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
             # velocity prediction
             self.Xpr[k,3:6] = self.Xpo[k-1, 3:6] + np.squeeze(self.R.dot(self.f[k].reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
-            # if CF is on the ground
-            # if Xpr[k, 2] < 0:  
-            #     Xpr[k, 2:6] = np.zeros((1,4))    
             # quaternion update
             qk_1 = Quaternion(self.q_list[k-1,:])
             dqk  = Quaternion(self.zeta(dw))       # convert incremental rotation vector to quaternion
             q_pr = qk_1 * dqk                 # compute quaternion multiplication with package
             self.q_list[k] = np.array([q_pr.w, q_pr.x, q_pr.y, q_pr.z])    # save quaternion in q_list
             self.R_list[k]   = q_pr.rotation_matrix                        # save rotation prediction to R_list
-        
+            # UWB bias prediction 
+            self.Xpr[k,6:14] = self.Xpo[k-1, 6:14] 
+
+
         # End of Prediction
 
         # Initially take our posterior estimates as the prior estimates
@@ -155,11 +163,39 @@ class ESKF:
         d_A = linalg.norm(an_A - np.squeeze(p_uwb)) 
         d_B = linalg.norm(an_B - np.squeeze(p_uwb))
         predicted = d_B - d_A
-        err_uwb = uwb[2] - predicted
+
+        # uwb bias
+        gb = np.zeros((1,8))
+        if uwb[0]==7 and uwb[1]==0:
+            gb[0,0] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,6]    # compensate for the bias
+        elif uwb[0]==0 and uwb[1]==1:
+            gb[0,1] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,7]    # compensate for the bias
+        elif uwb[0]==1 and uwb[1]==2:
+            gb[0,2] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,8]    # compensate for the bias 
+        elif uwb[0]==2 and uwb[1]==3:
+            gb[0,3] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,9]    # compensate for the bias
+        elif uwb[0]==3 and uwb[1]==4:
+            gb[0,4] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,10]    # compensate for the bias
+        elif uwb[0]==4 and uwb[1]==5:
+            gb[0,5] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,11]    # compensate for the bias
+        elif uwb[0]==5 and uwb[1]==6:
+            gb[0,6] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,12]    # compensate for the bias
+        elif uwb[0]==6 and uwb[1]==7:
+            gb[0,7] = 1
+            err_uwb = uwb[2] - predicted - self.Xpr[k,13]    # compensate for the bias
+        else:
+            err_uwb = uwb[2] - predicted
 
         # compute the gradient of measurement model
-        # G is 1 x 9
-        G = self.computeG_grad(an_A, an_B, self.t_uv, self.Xpr[k,0:3], self.q_list[k])
+        # G is 1 x 18
+        G = self.computeG_grad(an_A, an_B, self.t_uv, self.Xpr[k,0:3], self.q_list[k], gb)
 
         # uwb covariance
         Q = self.std_uwb_tdoa**2
@@ -171,13 +207,16 @@ class ESKF:
             # Kk is 9 x 1
             Kk = (self.Ppr[k].dot(G.T) / M).reshape(-1,1)           # in scalar case
             # update the posterios covariance matrix for error states
-            self.Ppo[k]= (np.eye(9) - Kk.dot(G.reshape(1,-1))).dot(self.Ppr[k])
+            self.Ppo[k]= (np.eye(17) - Kk.dot(G.reshape(1,-1))).dot(self.Ppr[k])
             # enforce symmetry
             self.Ppo[k] = 0.5 * (self.Ppo[k] + self.Ppo[k].T)
             derror = Kk.dot(err_uwb)             
             # update nominal states 
-            self.Xpo[k] = self.Xpr[k] +  np.squeeze(derror[0:6])
-            dq_k = Quaternion(self.zeta(np.squeeze(derror[6:])))
+            self.Xpo[k,0:6] = self.Xpr[k,0:6] +  np.squeeze(derror[0:6])
+            # update UWB bias (the last state is the bias)
+            self.Xpo[k,6:14] = self.Xpr[k,6:14] + np.squeeze(derror[9:])
+
+            dq_k = Quaternion(self.zeta(np.squeeze(derror[6:9])))
             #update quaternion: q_list
             qk_po = qk_pr * dq_k
             self.q_list[k] = np.array([qk_po.w, qk_po.x, qk_po.y, qk_po.z])
@@ -188,7 +227,7 @@ class ESKF:
             # keep the previous quaterion  q_list[k]
 
     '''compute gradient of meas.model'''
-    def computeG_grad(self, an_A, an_B, t_uv, Xpr, q_k):
+    def computeG_grad(self, an_A, an_B, t_uv, Xpr, q_k, gb):
         # compute the gradient considering the lever-arm effect
         qk_pr = Quaternion(q_k)
         C_iv = qk_pr.rotation_matrix
@@ -209,7 +248,7 @@ class ESKF:
         d_RVq = 2*np.concatenate((d_vec, d_mat), axis=1)
 
         g_q = ((np.squeeze(p_uwb) - an_B)/d_B).reshape(1,-1).dot(d_RVq) - ((np.squeeze(p_uwb) - an_A)/d_A).reshape(1,-1).dot(d_RVq)
-        G_x = np.concatenate((g_p, g_v, g_q), axis=1)
+        G_x = np.concatenate((g_p, g_v, g_q, gb.reshape(1,-1)), axis=1)
 
         Q_dtheta = 0.5*np.array([
             [-q_k[1], -q_k[2], -q_k[3]],
@@ -217,7 +256,7 @@ class ESKF:
             [ q_k[3],  q_w,    -q_k[1]],
             [-q_k[2],  q_k[1],  q_w]
         ])
-        G_dx = linalg.block_diag(np.eye(6), Q_dtheta)
+        G_dx = linalg.block_diag(np.eye(6), Q_dtheta, np.diag(np.squeeze(gb)))
         G = G_x.dot(G_dx)
         return G
     

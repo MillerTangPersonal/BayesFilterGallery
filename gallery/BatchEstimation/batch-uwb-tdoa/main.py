@@ -1,5 +1,6 @@
 '''
 Batch estimation for UWB TDOA using Lie group
+The input is simulated body velocity: 3 in translation velocity, 3 in angular velocity
 '''
 import rosbag
 import matplotlib.pyplot as plt
@@ -96,7 +97,8 @@ def eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos):
     plot_traj(gt_pos, eskf.Xpo, anchor_position)
     plt.show()
 
-def visual_traj(gt_pos, r_op):
+# visualize traj.
+def visual_traj(gt_pos, r_op, An):
     fig = plt.figure(facecolor="white")
     ax_t = fig.add_subplot(111, projection = '3d')
     # make the panes transparent
@@ -108,8 +110,15 @@ def visual_traj(gt_pos, r_op):
     ax_t.yaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
     ax_t.zaxis._axinfo["grid"]['color'] =  (0.5,0.5,0.5,0.5)
     
-    ax_t.plot(gt_pos[:,0],gt_pos[:,1], gt_pos[:,2],color='steelblue',linewidth=1.9, alpha=0.9, label = 'GT Traj.')
-    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='green',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
+    ax_t.plot(gt_pos[:,0],gt_pos[:,1], gt_pos[:,2],color='red',linewidth=1.9, alpha=1.0, label = 'GT Traj.')
+    ax_t.plot(r_op[:,0],r_op[:,1],r_op[:,2],color='blue',linewidth=1.9, alpha=0.9, label = 'est. Traj.')
+    ax_t.scatter(An[:,0], An[:,1], An[:,2], marker='o',color='red', label = 'Anchor position')
+    ax_t.set_xlabel(r'X [m]',fontsize=FONTSIZE, linespacing=30.0)
+    ax_t.set_ylabel(r'Y [m]',fontsize=FONTSIZE, linespacing=30.0)
+    ax_t.set_zlabel(r'Z [m]',fontsize=FONTSIZE, linespacing=30.0)
+    ax_t.legend(loc='best', fontsize=FONTSIZE)
+    ax_t.view_init(24, -58)
+    ax_t.set_box_aspect((1, 1, 0.5))  # xy aspect ratio is 1:1, but change z axis
     plt.show()
 
 # need to synchronize so as to compute errors
@@ -260,9 +269,7 @@ def update_op(smoother, T_op, T_final, dr_step, dtheta_step, K):
         T_prev = T_op[k,:,:]
         C_prev[k,:,:] = T_prev[0:3, 0:3]
         r_prev[k,:]   = -1.0 * np.squeeze((C_prev[k,:,:].T).dot(T_prev[0:3,3].reshape(-1,1)))
-
         dr_step[k,:]  = np.squeeze(r_op[k,:].reshape(-1,1) - r_prev[k,:].reshape(-1,1))
-
         delta_theta_skew = np.eye(3) - C_op[k,:,:].dot(C_prev[k,:,:].T)
 
         dtheta_step[k,0] = delta_theta_skew[2,1]
@@ -286,74 +293,21 @@ if __name__ == "__main__":
     # ground truth odometry as input     
     odom = data["odom"] 
 
-    # ----------- apply ESKF ----------- #
+    # ----------- apply ESKF with IMU as inputs ----------- #
     # eskf_est(t, imu, uwb, An, t_gt, gt_pos)
 
-    # ----- debug ----- #
-    DEBUG = False
+    VIS_DR = False
 
     K = t.shape[0]
+    # we do not use imu meas. as inputs in this code
     acc = imu[0:K,0:3].T;                           # linear acceleration, shape(3,K), unit m/s^2
     gyro = imu[0:K,3:].T;                           # rotational velocity, shape(3,K), unit rad/s
-    g = np.array([0.0, 0.0, -9.8]).reshape(-1,1)      # gravity in inertial frame
-    # --------- compute the input data ----------- #
-    # IMU measurements: 
-    # acc: m/s^2    acc. in x, y, and z 
-    # gyro: rad/s   angular velocity 
-    v_vk_vk_i = np.zeros((3, K))          # translation velocity of vehicle frame with respect to inertial frame, expressed in vehicle frame 
-    q_list = np.zeros((K,4))              # quaternion list
-    R_list = np.zeros((K,3,3))            # Rotation matrix list (from body frame to inertial frame) 
-    q_list[0,:] = np.array([1.0, 0.0, 0.0, 0.0])
-    R_list[0,:,:] = np.eye(3)
-    # compute the v_vk_vk_i (imu dea reckoning drifts quickly)
-    for idx in range(1,K):
-        # compute dt
-        dt = t[idx] - t[idx-1] 
-        # rotation from inertial to body frame (to convert g to body frame)
-        R_iv = R_list[idx-1,:,:]
-        C_vi = R_iv.T
-        # compute input v_k 
-        v_vk_vk_i[:, idx] = v_vk_vk_i[:,idx-1] + (acc[:,idx-1] + np.squeeze(C_vi.dot(g))) * dt
-
-        # quaternion prop. (dead reckoning) 
-        # problem #1: gryo[2,:] and odom[:,5] are different. The DR drifts very quickly. 
-        # dw   = gyro[:,idx-1] * dt     
-        # the difference between gyro[:,idx-1] and odom[idx-1,3:6]) are [0.001, -0.0004, -0.0008]
-        dw = odom[idx-1,3:6] * dt
-        dqk  = Quaternion(zeta(dw))           # convert incremental rotation vector to quaternion
-        dR = dqk.rotation_matrix
-        R_list[idx,:,:] = R_iv.dot(dR)
-
-    if DEBUG:
-        fig = plt.figure(facecolor="white")
-        ax = fig.add_subplot(311)
-        ax.plot(t[0:K], gyro[0,:])
-        ax.plot(t[0:K], odom[:,3],'--')
-        plt.ylim(-0.1, 0.1)
-        bx = fig.add_subplot(312)
-        bx.plot(t[0:K], gyro[1,:])
-        bx.plot(t[0:K], odom[:,4],'--')
-        plt.ylim(-0.1, 0.1)
-        cx = fig.add_subplot(313)
-        cx.plot(t[0:K], gyro[2,:])
-        cx.plot(t[0:K], odom[:,5],'--')
-        plt.ylim(-0.1, 0.1)
-
-        fig1 = plt.figure(facecolor="white")
-        ax1 = fig1.add_subplot(311)
-        ax1.plot(t[0:K], v_vk_vk_i[0,:])
-        ax1.plot(t[0:K], odom[:,0],'--')
-        bx1 = fig1.add_subplot(312)
-        bx1.plot(t[0:K], v_vk_vk_i[1,:])
-        bx1.plot(t[0:K], odom[:,1],'--')
-        cx1 = fig1.add_subplot(313)
-        cx1.plot(t[0:K], v_vk_vk_i[2,:])
-        cx1.plot(t[0:K], odom[:,2],'--')
-        plt.show()
-
+    # gravity
+    g = np.array([0.0, 0.0, -9.8]).reshape(-1,1)    # gravity in inertial frame
     # ---------- create quadrotor model ------------ #
+    # input noise covariance matrix
     Q = np.diag([0.04, 0.04, 0.04, 0.04, 0.04, 0.04])  
-    R = 0.05 # UWB meas. variance
+    R = 0.05**2 # UWB meas. variance
     # --- external calibration --- #
     # rotation from vehicel frame to UWB frame
     C_u_v = np.eye(3)      # uwb don't have orientation
@@ -364,7 +318,6 @@ if __name__ == "__main__":
     # init. state and covariance
     X0 = np.zeros((6,1))
     P0 = np.eye(6) * 0.0001
-
     # ----------- create RTS-smoother ----------- #
     smoother = RTS_Smoother_3D(drone, K)
 
@@ -372,23 +325,15 @@ if __name__ == "__main__":
     C_op = np.zeros((K, 3, 3))              # rotation matrix
     r_op = np.zeros((K, 3))                 # translation vector
     T_op = np.zeros((K, 4, 4))              # transformation matrix
-    
     # init
     C_op[0,:,:] = np.eye(3)                 # init. rotation 
-    # r_op[0,:] = np.array([0.0,0.0,1.0])   # init. translation  (with level arm)
-    r_op[0,:] = np.array([1.5,0.0,1.5])     # init. translation  (without level arm)
+    r_op[0,:] = np.array([1.5,0.0,1.5])     # init. translation  
     T_op[0,:,:] = getTrans(C_op[0,:,:], r_op[0,:])
-
+    # init input
     v_k = odom[:, 0:3]
     w_k = odom[:, 3:6]
     # dead reckoning: T_op
     for k in range(1,K):
-        # input v(k-1) (computed)
-        # v_k = v_vk_vk_i[:,k-1];  w_k = odom[k-1,3:6]
-
-        # the gt imu is also biased around 0.001
-        # w_k = gyro[:, k-1]; 
-
         # using gt odomety, we have very good dead reckoning. (consider to add noise on the gt inputs)
         # we add noise to the ground truth input (translation velocity, angular velocity)
         Norm = stats.norm(0, 0.2)
@@ -402,14 +347,10 @@ if __name__ == "__main__":
         # compute the operating point for transformation matrix T_op
         T_op[k,:,:] = getTrans(C_op[k,:,:], r_op[k,:])
 
+    if VIS_DR:
+        visual_traj(gt_pos, r_op)
 
-    visual_traj(gt_pos, r_op)
-
-    # Gauss-Newton 
-    # in each iteration, 
-    # (1) do one batch estimation for dx 
-    # (2) update the operating point x_op
-    # (3) check the convergence
+    # ---------- Gauss-Newton ---------- #
     iter = 0;       max_iter = 10; 
     delta_p = 1;    T_final = np.zeros((K, 4, 4))
 
@@ -417,12 +358,10 @@ if __name__ == "__main__":
     r_prev = np.zeros((K,3))
     dr_step = np.zeros((K,3))
     dtheta_step = np.zeros((K,3))
-
+    # convergence label
     label = 1
-
     # uwb meas.
     y_k = uwb 
-
     while (iter < max_iter) and (label != 0):
         iter = iter + 1
         print("\nIteration: #{0}\n".format(iter))
@@ -434,13 +373,10 @@ if __name__ == "__main__":
 
         # update operating point
         X0, P0, T_op, dr_step = update_op(smoother, T_op, T_final, dr_step, dtheta_step, K)
-
         label = np.sum(dr_step > 0.005)
         print(label)
         if label == 0:
             print("Converged!\n")
-
-
 
     # interpolate Vicon measurements
     f_x = interpolate.splrep(t_gt, gt_pos[:,0], s = 0.5)
@@ -449,7 +385,6 @@ if __name__ == "__main__":
     x_interp = interpolate.splev(t, f_x, der = 0)
     y_interp = interpolate.splev(t, f_y, der = 0)
     z_interp = interpolate.splev(t, f_z, der = 0)
-
     x_error = r_op[:,0] - np.squeeze(x_interp)
     y_error = r_op[:,1] - np.squeeze(y_interp)
     z_error = r_op[:,2] - np.squeeze(z_interp)
@@ -463,9 +398,8 @@ if __name__ == "__main__":
     print('The RMS error for position y is %f [m]' % rms_y)
     print('The RMS error for position z is %f [m]' % rms_z)
 
-
     # visual batch estimation results
-    visual_traj(gt_pos, r_op)
+    visual_traj(gt_pos, r_op, drone.An)
     # visual batch estimation results
     # compute C_gt and r_gt
     # need to synchronize before compute the error

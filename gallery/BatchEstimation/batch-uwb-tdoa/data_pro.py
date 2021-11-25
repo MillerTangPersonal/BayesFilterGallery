@@ -90,7 +90,7 @@ if __name__ == "__main__":
     # get uwb at unique time: {t_uwb_u, uwb_u}
     uwb_u = uwb[idx_uwb,:]
     # synchronize IMU data to UWB time
-    IMU_GT = True
+    IMU_GT = False
     if IMU_GT:
         imu_syn = synchnize_imu(t_imu_gt, imu_gt, t_uwb_u)
     else:
@@ -121,5 +121,5 @@ if __name__ == "__main__":
     t = (t - min_t).reshape(-1,1)
 
     # save t, imu, uwb, t_gt_pose, gt_pos, gt_quat 
-    np.savez('sim_uwb_batch2.npz', t=t, imu_syn=imu_syn, uwb = uwb_u, odom = odom_syn,\
+    np.savez('sim_uwb_batch2_raw_imu.npz', t=t, imu_syn=imu_syn, uwb = uwb_u, odom = odom_syn,\
              t_gt=t_gt_pose, gt_pos=gt_pos, gt_quat=gt_quat, An=anchor_position)

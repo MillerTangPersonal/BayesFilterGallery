@@ -1,5 +1,6 @@
 '''
 main file for eskf estimation for simulation (without lever-arm)
+with UWB bias estimation
 '''
 #!/usr/bin/env python3
 import argparse

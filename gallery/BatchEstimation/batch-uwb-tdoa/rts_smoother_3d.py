@@ -79,8 +79,7 @@ class RTS_Smoother_3D:
 
     '''forward pass'''
     def forward(self, X0, P0, C_op, r_op, v_data, w_data, y_data, t):
-        # v_data: k x 3
-        # w_data: k x 3
+        # v_data and w_data: k x 3 dimension
         # init. state and covariance
         self.pert_pr_f[0,:] = np.squeeze(X0)
         self.Ppr_f[0,:,:] = P0
@@ -104,29 +103,13 @@ class RTS_Smoother_3D:
 
             # measurements
             G = np.empty((0,6));    ey_k = np.empty(0);    Rk_y = np.empty((0,0))
-
-
-            # [change here]
-            # for j in range(20):
-            #     cond = np.sum(y_data[:,k,j] == -1)    # if meas. invalid, all elements are -1, cond = 4
-            #     if (cond == 0):
-            #         P_opt = self.robot.compute_point(C_op_k, r_op_k, j)
-            #         G_i = self.robot.compute_G(C_op_k, r_op_k, j, P_opt)
-            #         e_y_i = self.compute_ey_k(y_data[:,k,j], P_opt)
-            #         ey_k = np.append(ey_k, np.squeeze(e_y_i))
-            #         Rk_y = block_diag(Rk_y, self.robot.Rm)
-            #         G = np.concatenate((G, G_i), axis=0)
-            
-
-
+            # If data is not sync., check if we have meas
             # compute the meas. Jacobian 
             G = self.robot.compute_G(y_data[k,:], C_op_k, r_op_k)
             # receive one UWB meas. at one timestamp
             ey_k = self.compute_ey_k(y_data[k,:], C_op_k, r_op_k)
             # meas. cov
             Rk_y = self.robot.Rm
-
-
 
             # forward equations
             if G.size == 0:  # no valid meas. 
