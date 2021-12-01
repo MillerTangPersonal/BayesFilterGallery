@@ -38,9 +38,11 @@ if __name__ == "__main__":
                                 [-4.0, -4.3,  0.1]])
 
     # access rosbag file
-    # ros_bag = "sim-data/simData_lever_arm.bag"       # with lever-arm
-    # ros_bag = "sim-data/sim_data.bag"                # without lever-arm
-    ros_bag = "sim-data/sim_uwb_batch2.bag"             # with lever-arm (with gt imu)
+    # ros_bag = "sim-data/old/simData_lever_arm.bag"       # with lever-arm
+    # ros_bag = "sim-data/old/sim_data.bag"                # without lever-arm
+    # ros_bag = "sim-data/old/sim_uwb_batch2.bag"          # with lever-arm (with gt imu)
+
+    ros_bag = "sim-data/1130_simData_larm.bag"             #with lever-arm
     bag = rosbag.Bag(ros_bag)
 
     # -------------------- start extract the rosbag ------------------------ #
@@ -90,14 +92,10 @@ if __name__ == "__main__":
     # get uwb at unique time: {t_uwb_u, uwb_u}
     uwb_u = uwb[idx_uwb,:]
     # synchronize IMU data to UWB time
-    IMU_GT = False
-    if IMU_GT:
-        imu_syn = synchnize_imu(t_imu_gt, imu_gt, t_uwb_u)
-    else:
-        imu_syn = synchnize_imu(t_imu, imu, t_uwb_u)
+    imu_syn = synchnize_imu(t_imu, imu, t_uwb_u)
 
-    t = t_uwb_u
-    min_t = min(t)
+    t_sensor = t_uwb_u       # t of the sensor (imu is sync to uwb)
+    min_t = min(t_sensor)
     # get the vicon information from min_t
     t_gt_pose = np.array(t_gt_pose);        idx = np.argwhere(t_gt_pose > min_t); t_gt_pose = t_gt_pose[idx]
     gt_pos = np.array(gt_pos)[idx,:];       gt_pos = np.squeeze(gt_pos)
@@ -107,19 +105,19 @@ if __name__ == "__main__":
     odom_gt = np.array(odom_gt)[idx,:];     odom_gt = np.squeeze(odom_gt)
 
     # synchronize the odometry
-    lin_x = interp_meas(t_odom, odom_gt[:,0], t).reshape(-1,1)
-    lin_y = interp_meas(t_odom, odom_gt[:,1], t).reshape(-1,1)
-    lin_z = interp_meas(t_odom, odom_gt[:,2], t).reshape(-1,1)
-    ang_x = interp_meas(t_odom, odom_gt[:,3], t).reshape(-1,1)
-    ang_y = interp_meas(t_odom, odom_gt[:,4], t).reshape(-1,1)
-    ang_z = interp_meas(t_odom, odom_gt[:,5], t).reshape(-1,1)
+    lin_x = interp_meas(t_odom, odom_gt[:,0], t_sensor).reshape(-1,1)
+    lin_y = interp_meas(t_odom, odom_gt[:,1], t_sensor).reshape(-1,1)
+    lin_z = interp_meas(t_odom, odom_gt[:,2], t_sensor).reshape(-1,1)
+    ang_x = interp_meas(t_odom, odom_gt[:,3], t_sensor).reshape(-1,1)
+    ang_y = interp_meas(t_odom, odom_gt[:,4], t_sensor).reshape(-1,1)
+    ang_z = interp_meas(t_odom, odom_gt[:,5], t_sensor).reshape(-1,1)
 
     odom_syn = np.concatenate((lin_x, lin_y, lin_z, ang_x, ang_y, ang_z), axis = 1)
 
     # reset ROS time base
     t_gt_pose = (t_gt_pose - min_t).reshape(-1,1)
-    t = (t - min_t).reshape(-1,1)
+    t_sensor = (t_sensor - min_t).reshape(-1,1)
 
-    # save t, imu, uwb, t_gt_pose, gt_pos, gt_quat 
-    np.savez('sim_uwb_batch2_raw_imu.npz', t=t, imu_syn=imu_syn, uwb = uwb_u, odom = odom_syn,\
+    # save t_sensor, imu, uwb, t_gt_pose, gt_pos, gt_quat 
+    np.savez('1130_simData.npz', t_sensor = t_sensor, imu_syn = imu_syn, uwb = uwb_u,\
              t_gt=t_gt_pose, gt_pos=gt_pos, gt_quat=gt_quat, An=anchor_position)

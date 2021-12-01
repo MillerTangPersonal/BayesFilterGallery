@@ -1,8 +1,8 @@
 '''
-Batch estimation for UWB TDOA using Lie group
+Batch estimation for UWB TDOA using Lie group SE(3)
 The input is simulated body velocity: 3 in translation velocity, 3 in angular velocity
 '''
-import rosbag
+import rosbag, os
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
@@ -283,9 +283,11 @@ def update_op(smoother, T_op, T_final, dr_step, dtheta_step, K):
     T_op = np.copy(T_final)              # need to use np.copy()
     return X0, P0, T_op, dr_step
 
-if __name__ == "__main__":    
+if __name__ == "__main__":   
+    # address of the current script
+    cwd = os.path.dirname(__file__)
     # load data
-    data = np.load("data_npz/sim_uwb_batch2.npz")
+    data = np.load(os.path.join(cwd, "../data_npz/sim_uwb_batch2.npz"))
     t = data["t"];         imu = data["imu_syn"];      uwb = data["uwb"]
     t_gt = data["t_gt"];   gt_pos = data["gt_pos"];    gt_quat = data["gt_quat"]
     An = data["An"]; 
