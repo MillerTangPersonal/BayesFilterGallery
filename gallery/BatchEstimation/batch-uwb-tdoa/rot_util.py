@@ -6,13 +6,14 @@ from scipy import linalg
 '''skew operation'''
 def skew(r):
     r = np.squeeze(r)
-    r_skew = np.array([[0.0,   -r[2],   r[1]],
-                       [r[2],      0,  -r[0]],
-                       [-r[1],  r[0],    0.0]], dtype=float)
+    r_skew = np.array([[ 0.0,   -r[2],   r[1]],
+                       [ r[2],   0.0,   -r[0]],
+                       [-r[1],   r[0],    0.0]], dtype=float)
     return r_skew
 
 '''help function'''
 def zeta(phi):
+    # equ. (101) in eskf
     phi_norm = np.linalg.norm(phi)
     if phi_norm == 0:
         dq = np.array([1, 0, 0, 0])

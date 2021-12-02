@@ -16,7 +16,8 @@ class DroneModel:
         self.C_u_v = C_u_v            # rotation from vehicle (imu) frame to UWB frame (not used here)
         self.rho_v_u_v = rho_v_u_v    # translation from vehicle (imu) frame to UWB frame
         self.An = An                  # anchor positions
-        self.gravity = np.array([0, 0, 9.81]).reshape(-1,1)
+        self.gravity = np.array([0, 0, 9.81]).reshape(-1,1)   # gravity vector
+
     '''propagate input noise'''
     def nv_prop(self, dt):
         # construct noise
@@ -26,10 +27,8 @@ class DroneModel:
             [Vi,               np.zeros((3,3)) ],
             [np.zeros((3,3)),  Thetai          ]
         ])
-        # [check this equ.]: this doesn't seem to be correct
         Fi = np.block([
-            # [np.zeros((3,3)),   np.zeros((3,3))],
-            [np.eye(3),         np.eye(3)      ],
+            [np.zeros((3,3)),   np.zeros((3,3))],
             [np.eye(3),         np.zeros((3,3))],
             [np.zeros((3,3)),   np.eye(3)      ]
         ])
@@ -49,8 +48,8 @@ class DroneModel:
         dw = gyro_k * dt
         dqk = Quaternion(zeta(dw)) # convert incremental rotation vector to quaternion [check: where is this equation]
         quat = q_k1 * dqk          # compute quaternion multiplication with package
-        q_check = np.array([quat[0], quat[1], quat[2], quat[3]])
-        X_check = np.block([p_check, v_check, q_check])
+        q_check = np.array([quat.w, quat.x, quat.y, quat.z])
+        X_check = np.block([p_check, v_check, q_check])   # X_check \in R^10
         return X_check 
 
     '''compute motion model Jacobian in Batch estimation'''

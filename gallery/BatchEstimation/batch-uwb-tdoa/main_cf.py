@@ -155,19 +155,19 @@ def visual_traj(gt_pos, X_final, An):
 
 
 '''visual x,y,z'''
-def visual_xyz(t_gt, gt_pos, t, X_final):
+def visual_xyz(t_gt, gt_pos, t, X_final, K):
     fig1 = plt.figure(facecolor="white")
     ax = fig1.add_subplot(311)
-    ax.plot(t_gt, gt_pos[:,0], color = 'red')
-    ax.plot(t, X_final[:,0],   color = 'blue')
+    ax.plot(t_gt[0:K], gt_pos[0:K,0], color = 'red')
+    ax.plot(t[0:K], X_final[:,0],   color = 'blue')
 
     bx = fig1.add_subplot(312)
-    bx.plot(t_gt, gt_pos[:,1], color = 'red')
-    bx.plot(t, X_final[:,1],   color = 'blue')
+    bx.plot(t_gt[0:K], gt_pos[0:K,1], color = 'red')
+    bx.plot(t[0:K], X_final[:,1],   color = 'blue')
 
     cx = fig1.add_subplot(313)
-    cx.plot(t_gt, gt_pos[:,2], color = 'red')
-    cx.plot(t, X_final[:,2],   color = 'blue')
+    cx.plot(t_gt[0:K], gt_pos[0:K,2], color = 'red')
+    cx.plot(t[0:K], X_final[:,2],   color = 'blue')
     plt.show()
 
 
@@ -181,29 +181,32 @@ if __name__ == "__main__":
     An = data["An"]; 
 
     # ----------- apply ESKF with IMU as inputs [debug] ----------- #
-    X_po_ekf, q_po_ekf = eskf_est(t, imu, uwb, An, t_gt, gt_pos)
-    X_op_ekf = np.block([X_po_ekf,q_po_ekf])     # shape: K x 10
+    DEBUG = False
+    if DEBUG:
+        X_po_ekf, q_po_ekf = eskf_est(t, imu, uwb, An, t_gt, gt_pos)
+        X_op_ekf = np.block([X_po_ekf,q_po_ekf])     # shape: K x 10
+    # ------------------------------------------------------------- #
 
     K = t.shape[0]
+    K = 40
     # imu inputs
     acc = imu[0:K, 0:3]     # shape: K x 3
     gyro = imu[0:K, 3:]     # shape: K x 3
-    # gravity
-    g = np.array([0.0, 0.0, -9.8]).reshape(-1,1)   
+
     # ------- create quadrotor model 
-    # input noise covariance matrix
+    # input noise 
     std_acc = 2.0;   std_gyro = 0.1;   std_uwb = 0.05
     # UWB meas. variance
     R = std_uwb * 2
     # --- external calibration
-    # rotation from vehicle frame to UWB frame
+    # rotation from vehicle frame to UWB frame (for completeness)
     C_u_v = np.eye(3)
     # translation vector from vehicle frame to UWB frame
     rho_v_u_v =  np.array([-0.01245, 0.00127, 0.0908]).reshape(-1,1) 
     # create drone model
     drone = DroneModel(std_acc, std_gyro, R, C_u_v, rho_v_u_v, An)
     # init. error state and covariance
-    X0 = np.zeros((9,1))
+    pert_x0 = np.zeros((9,1))
     P0 = np.eye(9) * 0.0001
     # ----- create RTS smoother
     smoother = RTS_Smoother(drone, K)
@@ -215,17 +218,19 @@ if __name__ == "__main__":
     for k in range(1, K):
         X_op_k1 = X_op[k-1,:]
         # inputs
-        acc_k1 = acc[k-1,:];  gyro_k1 = gyro[k-1, :]
+        acc_k = acc[k,:];  gyro_k = gyro[k, :]
         # compute dt
         dt = t[k] - t[k-1]
-        X_op[k, :] = drone.motion_model(X_op_k1, acc_k1, gyro_k1, dt)
+        X_op[k, :] = drone.motion_model(X_op_k1, acc_k, gyro_k, dt)
 
 
-    # [debug]
-    X_op = X_op_ekf
-    # visualize dead-reckoning results
+    # [debug] use the eskf estimate as the operating point 
+    if DEBUG:
+        X_op = X_op_ekf
+
+    # ------ visualize dead-reckoning results ------ #
     # visual_traj(gt_pos, X_op, drone.An)
-    visual_xyz(t_gt, gt_pos, t, X_op)
+    # visual_xyz(t_gt, gt_pos, t, X_op)
 
     # ----- Gauss-Newton
     iter = 0;       max_iter = 10; 
@@ -244,7 +249,7 @@ if __name__ == "__main__":
         print("\nIteration: #{0}\n".format(iter))
         # aplly full batch estimation using RTS smoother
         # RTS forward
-        smoother.forward(X0, P0, X_op, acc, gyro, uwb, t)
+        smoother.forward(pert_x0, P0, X_op, acc, gyro, uwb, t)
         # RTS backward
         smoother.backward()
 
@@ -260,9 +265,9 @@ if __name__ == "__main__":
     f_x = interpolate.splrep(t_gt, gt_pos[:,0], s = 0.5)
     f_y = interpolate.splrep(t_gt, gt_pos[:,1], s = 0.5)
     f_z = interpolate.splrep(t_gt, gt_pos[:,2], s = 0.5)
-    x_interp = interpolate.splev(t, f_x, der = 0)
-    y_interp = interpolate.splev(t, f_y, der = 0)
-    z_interp = interpolate.splev(t, f_z, der = 0)
+    x_interp = interpolate.splev(t[0:K], f_x, der = 0)
+    y_interp = interpolate.splev(t[0:K], f_y, der = 0)
+    z_interp = interpolate.splev(t[0:K], f_z, der = 0)
     x_error = X_final[:,0] - np.squeeze(x_interp)
     y_error = X_final[:,1] - np.squeeze(y_interp)
     z_error = X_final[:,2] - np.squeeze(z_interp)
@@ -277,4 +282,4 @@ if __name__ == "__main__":
     print('The RMS error for position z is %f [m]' % rms_z)
 
     # visual_traj(gt_pos, X_final, drone.An)
-    visual_xyz(t_gt, gt_pos, t, X_final)
+    visual_xyz(t_gt, gt_pos, t, X_final, K)

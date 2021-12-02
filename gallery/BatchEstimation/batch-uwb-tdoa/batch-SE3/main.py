@@ -14,7 +14,7 @@ from sklearn.metrics import mean_squared_error
 
 from drone_model import DroneModel
 from rts_smoother_3d import RTS_Smoother_3D
-from so3_util import axisAngle_to_Rot, getTrans, skew
+from so3_util import getTrans, skew
 
 # help function in EKF
 from eskf_class_la import ESKF
@@ -287,7 +287,7 @@ if __name__ == "__main__":
     # address of the current script
     cwd = os.path.dirname(__file__)
     # load data
-    data = np.load(os.path.join(cwd, "../data_npz/sim_uwb_batch2.npz"))
+    data = np.load(os.path.join(cwd, "../data_npz/old/sim_uwb_batch2.npz"))
     t = data["t"];         imu = data["imu_syn"];      uwb = data["uwb"]
     t_gt = data["t_gt"];   gt_pos = data["gt_pos"];    gt_quat = data["gt_quat"]
     An = data["An"]; 
@@ -340,12 +340,12 @@ if __name__ == "__main__":
         # we add noise to the ground truth input (translation velocity, angular velocity)
         Norm = stats.norm(0, 0.2)
 
-        v_k[k-1,:] = odom[k-1,0:3] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()])) 
-        w_k[k-1,:] = odom[k-1,3:6] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()]))
+        v_k[k,:] = odom[k,0:3] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()])) 
+        w_k[k,:] = odom[k,3:6] + np.squeeze(np.array([Norm.rvs(), Norm.rvs(), Norm.rvs()]))
 
         # compute dt
         dt = t[k] - t[k-1]
-        C_op[k,:,:], r_op[k,:] = drone.motion_model(C_op[k-1,:,:], r_op[k-1,:], v_k[k-1], w_k[k-1], dt)
+        C_op[k,:,:], r_op[k,:] = drone.motion_model(C_op[k-1,:,:], r_op[k-1,:], v_k[k], w_k[k], dt)
         # compute the operating point for transformation matrix T_op
         T_op[k,:,:] = getTrans(C_op[k,:,:], r_op[k,:])
 

@@ -5,8 +5,8 @@ import numpy as np
 from scipy import linalg
 import math
 from scipy.linalg import block_diag
-from pytransform3d.rotations import axis_angle_from_matrix
-from so3_util import getTrans, getTrans_in, skew
+# from pytransform3d.rotations import axis_angle_from_matrix
+from so3_util import getTrans, getTrans_in, skew, axisAngle_from_rot
 
 np.set_printoptions(precision=4)
 
@@ -45,7 +45,9 @@ class RTS_Smoother_3D:
         r_now = tau[0:3, 3]
         # Equ. (60) to compute J. Then, J * rho = r
         # could be done by eigenvalue
-        axisAngle = axis_angle_from_matrix(C_now)
+        # axisAngle = [x, y, z, angle]
+        #axisAngle = axis_angle_from_matrix(C_now)      # this package is not stable
+        axisAngle = axisAngle_from_rot(C_now)
         axisAngle = np.squeeze(axisAngle)
 
         if(axisAngle[3] == 0):

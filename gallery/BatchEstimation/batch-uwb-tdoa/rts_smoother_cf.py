@@ -27,10 +27,11 @@ class RTS_Smoother:
         self.robot = robot
 
     '''compute ev_k'''
-    def compute_ev_k(self, X_op_k1, X_op_k, dt, v_k1, w_k1):
+    def compute_ev_k(self, X_op_k1, X_op_k, dt, v_k, w_k):
         # compute x_check using robot motion model
-        # {v_k1, w_k1} is the input at timestamp k-1
-        x_check = self.robot.motion_model(X_op_k1, v_k1, w_k1, dt)
+        # {v_k, w_k} is the input at timestamp k
+        # X_op_k1 is the opertating point at timestamp k-1
+        x_check = self.robot.motion_model(X_op_k1, v_k, w_k, dt)
         # compute the error 
         dp = x_check[0:3] - X_op_k[0:3]
         dv = x_check[3:6] - X_op_k[3:6]
@@ -58,10 +59,11 @@ class RTS_Smoother:
         return err_y
 
     '''forward pass'''
-    def forward(self, X0, P0, X_op, v_data, w_data, y_data, t):
-        # v_data and w_data: k x 3 dimension
+    def forward(self, pert_x0, P0, X_op, v_data, w_data, y_data, t):
+        # v_data and w_data: K x 3 dimension
+        # X_op: K x 10
         # init. state and covariance
-        self.pert_pr_f[0,:] = np.squeeze(X0)
+        self.pert_pr_f[0,:] = np.squeeze(pert_x0)
         self.Ppr_f[0,:,:] = P0
         # loop over all timestamps
         for k in range(self.Kmax):
@@ -72,7 +74,7 @@ class RTS_Smoother:
                 X_op_k  = X_op[k,:]     # timestamp k
                 X_op_k1 = X_op[k-1,:]   # timestamp k-1
                 # input data at timestamp k
-                v_data_k = v_data[k,:];  w_data_k = w_data[k,:] 
+                v_data_k = v_data[k,:];  w_data_k = w_data[k,:] # input at timestamp k
                 dt = t[k] - t[k-1]
                 Qv_k = self.robot.nv_prop(dt)
                 # compute ev_k

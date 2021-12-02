@@ -12,12 +12,12 @@ q = Quaternion([0.9999, 0.0004, 0.0008, 0.0017])
 # yaw =0, pitch =0, roll=0
 q1 = Quaternion([1,0,0,0])
 
-q_inv = q.inverse
+q1_inv = q1.inverse
 
-dq = q1 * q_inv
+dq = q1_inv * q         # q = q1 * dq ---> dq = q1_inv * q
 dq2 = 2*dq
-d_log = Quaternion.log_map(q1, q_inv)   # [???, need to time 2 to get the error in angles], see equation (112)
-d_log2 = 2 * Quaternion.log_map(q1, q_inv)
+d_log = Quaternion.log_map(q1_inv, q)   # [???, need to time 2 to get the error in angles], see equation (112)
+d_log2 = 2 * Quaternion.log_map(q1_inv, q)
 print("Test the SO3 X SO3 -> R3: \n")
 print("dq gives {0}, {1}, {2}\n".format(dq[1],dq[2], dq[3]))
 print("log_map gives {0}, {1}, {2}\n".format(d_log[1],d_log[2], d_log[3]))
