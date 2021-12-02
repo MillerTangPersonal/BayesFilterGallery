@@ -311,7 +311,7 @@ if __name__ == "__main__":
     Q = np.diag([0.04, 0.04, 0.04, 0.04, 0.04, 0.04])  
     R = 0.05**2 # UWB meas. variance
     # --- external calibration --- #
-    # rotation from vehicel frame to UWB frame
+    # rotation from vehicle frame to UWB frame
     C_u_v = np.eye(3)      # uwb don't have orientation
     # translation vector from vehicle frame to UWB frame
     rho_v_u_v =  np.array([-0.01245, 0.00127, 0.0908]).reshape(-1,1) 
