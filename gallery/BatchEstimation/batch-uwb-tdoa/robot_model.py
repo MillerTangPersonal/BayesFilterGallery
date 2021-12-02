@@ -81,6 +81,7 @@ class DroneModel:
         d_i = linalg.norm(an_i - np.squeeze(p_uwb)) 
         d_j = linalg.norm(an_j - np.squeeze(p_uwb))
         y_meas = d_j - d_i
+
         return y_meas
 
 
@@ -118,6 +119,7 @@ class DroneModel:
         ])
         G_dx = linalg.block_diag(np.eye(6), Q_dtheta)
         G = G_x.dot(G_dx)    # shape: 1 x 9
+
         return G
 
 

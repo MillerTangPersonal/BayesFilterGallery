@@ -7,7 +7,7 @@ from scipy import linalg
 import math
 from scipy.linalg import block_diag
 from pytransform3d.rotations import axis_angle_from_matrix
-from rot_util import skew
+from rot_util import skew, zeta
 
 np.set_printoptions(precision=4)
 
@@ -42,8 +42,9 @@ class RTS_Smoother:
         q_k_check = Quaternion([x_check[6], x_check[7], x_check[8], x_check[9]])
         # SO3 X SO3 -> R^3, Log(q*q^{-1}),  equation (161) in eskf
         # consider the direction here: q_op_k_inv * q_k_check = dq_k --> q_k_check = q_op_k * dq_k
-        d_q = 2 * Quaternion.log_map(q_op_k_inv, q_k_check)    # approx = 2 * (q_k_check * q_op_k_inv)[1:4]
-        d_theta = np.array([d_q[1],d_q[2], d_q[3]])
+        
+        d_rpy = 2 * q_op_k_inv * q_k_check                         # 2 * (q_k_check * q_op_k_inv)[1:4]
+        d_theta = np.array([d_rpy[1], d_rpy[2], d_rpy[3]])
 
         ev_k = np.block([dp, dv, d_theta]).reshape(-1,1)       # error in perturbation (error state)
 
@@ -79,6 +80,8 @@ class RTS_Smoother:
                 Qv_k = self.robot.nv_prop(dt)
                 # compute ev_k
                 ev_k = self.compute_ev_k(X_op_k1, X_op_k, dt, v_data_k, w_data_k)
+                # print("k = {0}, ev_k = {1}\n".format(k, ev_k))
+
                 # compute F_k
                 F_k = self.robot.compute_F(X_op_k1, v_data_k, w_data_k, dt)
                 self.F[k-1, :, :] = F_k
@@ -91,6 +94,8 @@ class RTS_Smoother:
             G = self.robot.compute_G(y_data[k,:], X_op_k)
             # receive one UWB meas. at one timestamp
             ey_k = self.compute_ey_k(y_data[k,:], X_op_k)
+            # print("k = {0}, ey_k = {1}\n".format(k, ey_k))
+
             # meas. cov
             Rk_y = self.robot.Rm
 
@@ -102,6 +107,7 @@ class RTS_Smoother:
                     # equ. 2
                     pert_pr_f_k = F_k.dot(self.pert_po_f[k-1,:].reshape(-1,1)) + ev_k.reshape(-1,1)
                     self.pert_pr_f[k,:] = np.squeeze(pert_pr_f_k) 
+
                 # no meas. to update
                 self.Ppo_f[k,:,:] = self.Ppr_f[k,:,:]
                 self.pert_po_f[k,:] = self.pert_pr_f[k,:]
@@ -114,6 +120,7 @@ class RTS_Smoother:
                     # equ. 2
                     pert_pr_f_k = F_k.dot(self.pert_po_f[k-1,:].reshape(-1,1)) + ev_k.reshape(-1,1)
                     self.pert_pr_f[k,:] = np.squeeze(pert_pr_f_k) 
+
                 # equ. 3
                 GM = G.dot(self.Ppr_f[k,:,:]).dot(G.T) + Rk_y
                 K_k = self.Ppr_f[k,:,:].dot(G.T).dot(linalg.inv(GM))

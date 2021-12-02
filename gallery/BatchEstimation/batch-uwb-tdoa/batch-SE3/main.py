@@ -375,7 +375,7 @@ if __name__ == "__main__":
 
         # update operating point
         X0, P0, T_op, dr_step = update_op(smoother, T_op, T_final, dr_step, dtheta_step, K)
-        label = np.sum(dr_step > 0.005)
+        label = np.sum(abs(dr_step) > 0.005)
         print(label)
         if label == 0:
             print("Converged!\n")
