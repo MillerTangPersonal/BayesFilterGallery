@@ -284,5 +284,5 @@ if __name__ == "__main__":
     RMS_all = math.sqrt(rms_x**2 + rms_y**2 + rms_z**2)          
     print('The overall RMS error of position estimation is %f [m]\n' % RMS_all)
     
-    # visual_traj(gt_pos, X_final, drone.An)
+    visual_traj(gt_pos, X_final, drone.An)
     visual_xyz(t_gt, gt_pos, t, X_final)
