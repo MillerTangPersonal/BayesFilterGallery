@@ -33,7 +33,7 @@ class ESKF:
     def __init__(self, K):
         # Standard devirations of UWB meas. (tuning parameter)
         self.std_uwb_tdoa = np.sqrt(0.05)
-        # external calibration: translation vector from the quadcopter to UWB tag
+        # external calibration: translation vector from the quadrotor to UWB tag
         self.t_uv = np.array([-0.01245, 0.00127, 0.0908]).reshape(-1,1) 
 
         self.f = np.zeros((K, 3))

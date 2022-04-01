@@ -42,7 +42,7 @@ def eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos):
     K = t.shape[0]
     # Initial estimate for the state vector
     X0 = np.zeros((6,1))        
-    X0[0] = 1.5;  X0[1] = 0.0;  X0[2] = 1.5
+    X0[0] = 1.25;  X0[1] = 0.0;  X0[2] = 0.08
     q0 = Quaternion([1,0,0,0])  # initial quaternion
     # Initial posterior covariance
     std_xy0 = 0.1;       std_z0 = 0.1;      std_vel0 = 0.1
@@ -176,7 +176,8 @@ if __name__ == "__main__":
     # address of the current script
     cwd = os.path.dirname(__file__)
     # load data
-    data = np.load(os.path.join(cwd, "data_npz/1130_simData.npz"))
+    # data = np.load(os.path.join(cwd, "data_npz/1130_simData.npz"))
+    data = np.load(os.path.join(cwd, "test_dataset.npz"))
     t = data["t_sensor"];  imu = data["imu_syn"];      uwb = data["uwb"]
     t_gt = data["t_gt"];   gt_pos = data["gt_pos"];    gt_quat = data["gt_quat"]
     An = data["An"]; 
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     # compute the operating points initially with dead-reckoning
     X_op = np.zeros((K,10))     # [x,y,z,vx,vy,vz,qw,qx,qy,qz]
     # init
-    X_op[0,:] = np.array([1.5, 0.0, 1.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
+    X_op[0,:] = np.array([1.25, 0.0, 0.08, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
 
     for k in range(1, K):
         X_op_k1 = X_op[k-1,:]
@@ -233,7 +234,7 @@ if __name__ == "__main__":
     visual_xyz(t_gt, gt_pos, t, X_op)
 
     # ----- Gauss-Newton
-    iter = 0;       max_iter = 70; 
+    iter = 0;       max_iter = 200; 
     delta_p = 1; 
     X_final = np.zeros((K, 10))     # final position, velocity and quaternion
     # convergence label
