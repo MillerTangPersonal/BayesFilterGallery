@@ -152,7 +152,7 @@ class ESKF:
         d_m = math.sqrt(err_uwb**2/M)
 
         # -------------------- Statistical Validation -------------------- #
-        if d_m < 5:
+        if d_m < 10000:     # 5
             # Kk is 9 x 1
             Kk = (self.Ppr[k].dot(G.T) / M).reshape(-1,1)           # in scalar case
             # update the posterios covariance matrix for error states

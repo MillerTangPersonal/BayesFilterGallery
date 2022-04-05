@@ -2,6 +2,7 @@
 Batch estimation for UWB TDOA 
 IMU and UWB
 '''
+from pickle import TRUE
 import rosbag, os
 import matplotlib.pyplot as plt
 import matplotlib
@@ -42,7 +43,7 @@ def eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos):
     K = t.shape[0]
     # Initial estimate for the state vector
     X0 = np.zeros((6,1))        
-    X0[0] = 1.25;  X0[1] = 0.0;  X0[2] = 0.08
+    X0[0] = 1.36;  X0[1] = 0.0;  X0[2] = 0.16
     q0 = Quaternion([1,0,0,0])  # initial quaternion
     # Initial posterior covariance
     std_xy0 = 0.1;       std_z0 = 0.1;      std_vel0 = 0.1
@@ -97,7 +98,6 @@ def eskf_est(t, imu, uwb, anchor_position, t_gt_pose, gt_pos):
     # plot_traj(gt_pos, eskf.Xpo, anchor_position)
     # plt.show()
     return eskf.Xpo, eskf.q_list
-
 
 '''update operating point'''
 def update_op(smoother, X_op, X_final, dp_step, dv_step, dtheta_step, K):
@@ -154,21 +154,26 @@ def visual_traj(gt_pos, X_final, An):
     ax_t.set_box_aspect((1, 1, 0.5))  # xy aspect ratio is 1:1, but change z axis
     plt.show()
 
-
 '''visual x,y,z'''
 def visual_xyz(t_gt, gt_pos, t, X_final):
     fig1 = plt.figure(facecolor="white")
     ax = fig1.add_subplot(311)
-    ax.plot(t_gt, gt_pos[:,0], color = 'red')
-    ax.plot(t, X_final[:,0],   color = 'blue')
+    ax.plot(t_gt, gt_pos[:,0], color = 'red',  label = "gt")
+    ax.plot(t, X_final[:,0],   color = 'blue', label = "est")
+    ax.set_ylabel(r'X [m]',fontsize = FONTSIZE) 
+    ax.legend(loc='best')
 
     bx = fig1.add_subplot(312)
     bx.plot(t_gt, gt_pos[:,1], color = 'red')
     bx.plot(t, X_final[:,1],   color = 'blue')
+    bx.set_ylabel(r'Y [m]',fontsize = FONTSIZE) 
 
     cx = fig1.add_subplot(313)
     cx.plot(t_gt, gt_pos[:,2], color = 'red')
     cx.plot(t, X_final[:,2],   color = 'blue')
+    cx.set_ylabel(r'Y [m]',fontsize = FONTSIZE) 
+    cx.set_xlabel(r'Time [s]',fontsize = FONTSIZE)
+
     plt.show()
 
 
@@ -177,13 +182,14 @@ if __name__ == "__main__":
     cwd = os.path.dirname(__file__)
     # load data
     # data = np.load(os.path.join(cwd, "data_npz/1130_simData.npz"))
-    data = np.load(os.path.join(cwd, "test_dataset.npz"))
+    data = np.load(os.path.join(cwd, "const4_traj3.npz"))
+
     t = data["t_sensor"];  imu = data["imu_syn"];      uwb = data["uwb"]
     t_gt = data["t_gt"];   gt_pos = data["gt_pos"];    gt_quat = data["gt_quat"]
     An = data["An"]; 
 
     # ----------- apply ESKF with IMU as inputs [debug] ----------- #
-    DEBUG = False
+    DEBUG = True
     if DEBUG:
         X_po_ekf, q_po_ekf = eskf_est(t, imu, uwb, An, t_gt, gt_pos)
         X_op_ekf = np.block([X_po_ekf,q_po_ekf])     # shape: K x 10

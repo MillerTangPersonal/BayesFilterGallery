@@ -1,5 +1,6 @@
 '''
 load and sync imu and uwb data
+dataset in measurement type
 '''
 import rosbag
 import matplotlib.pyplot as plt
@@ -11,9 +12,11 @@ from scipy import interpolate
 
 ''' help function'''
 def interp_meas(t1, meas1, t2):
-    f_meas1 = interpolate.splrep(t1, meas1, s = 0.5)
+    # f_meas1 = interpolate.splrep(t1, meas1, s = 0.5)
+    # syn_m1 = interpolate.splev(t2, f_meas1, der = 0)
+
     # synchronized meas 1 w.r.t. t2
-    syn_m1 = interpolate.splev(t2, f_meas1, der = 0)
+    syn_m1 = np.interp(t2, t1, meas1)
     return syn_m1
 
 def synchnize_imu(t_imu, imu, t_uwb):
@@ -51,13 +54,14 @@ def array2id(array):
 if __name__ == "__main__":    
  
     # ros_bag = "sim-data/1130_simData_larm.bag"             #with lever-arm
-    anchor_npz = "/home/wenda/utias_uwb_dataset/dataset/flight-dataset/survey-results/anchor_const1.npz"
+    anchor_npz = "/home/wenda/utias_uwb_dataset/dataset/flight-dataset/survey-results/anchor_const4.npz"
     # access the survey results
     anchor_survey = np.load(anchor_npz)
     anchor_position = anchor_survey['an_pos']
 
     # access rosbag file
-    ros_bag  = "/home/wenda/data/uwb_dataset/rosbag-data/const1/bag/test_ds5_cv_imu.bag"
+    # ros_bag  = "/home/wenda/data/uwb_dataset/rosbag-data/const1/bag/test3.bag"
+    ros_bag  = "/home/wenda/data/uwb_dataset/rosbag-data/const4/const4-trial6-tdoa2-traj3.bag"
     bag = rosbag.Bag(ros_bag)
 
     # -------------------- start extract the rosbag ------------------------ #
@@ -108,13 +112,8 @@ if __name__ == "__main__":
     # downsample imu: only select the odd rows
     t_imu_d1 = t_imu[::2]
     imu_d1 = imu[::2]
-    t_imu_d2 = t_imu_d1[::2]
-    imu_d2 = imu_d1[::2]
-    t_imu_ds = t_imu_d2[::2]
-    imu_ds = imu_d2[::2]
-    t_imu_ds = t_imu_ds[::2]
-    imu_ds = imu_ds[::2]
-
+    t_imu_ds = t_imu_d1[::2]
+    imu_ds = imu_d1[::2]
     
     print("start syn!\n")
     # synchronize IMU data to UWB time
@@ -134,5 +133,5 @@ if __name__ == "__main__":
     t_sensor = (t_sensor - min_t).reshape(-1,1)
 
     # save t_sensor, imu, uwb, t_gt_pose, gt_pos, gt_quat 
-    np.savez('test_dataset.npz', t_sensor = t_sensor, imu_syn = imu_syn, uwb = uwb_u,\
+    np.savez('const4_traj3.npz', t_sensor = t_sensor, imu_syn = imu_syn, uwb = uwb_u,\
              t_gt=t_gt_pose, gt_pos=gt_pos, gt_quat=gt_quat, An=anchor_position)
