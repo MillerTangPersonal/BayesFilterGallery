@@ -209,7 +209,7 @@ if __name__ == "__main__":
     b  = loadmat(curr+'/dataset3.mat')['b']; 
 
     # window
-    w1 = 1214;        w2 = 1714  # Matlab: 1215 ~ 1714 --> Python: 1214 ~ 1713, set w2 = 1714 sinec a[w1:w2] doesn't get a[w2]
+    w1 = 1214;        w2 = 1714  # Matlab: 1215 ~ 1714 --> Python: 1214 ~ 1713, set w2 = 1714 since a[w1:w2] doesn't get a[w2]
     # complete data   
     # w1 = 1214;           w2 = 1220
 

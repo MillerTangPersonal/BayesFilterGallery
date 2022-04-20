@@ -114,5 +114,14 @@ def axisAngle_from_rot(R):
     a[3] = angle
     return a
 
+'''compute right Jacobian with phi'''
+def rightJacob(phi):
+    norm_phi = linalg.norm(phi)
+    if norm_phi == 0:
+        return np.eye(3)
+    else:
+        term1 = (1.0 - math.cos(norm_phi)) / (norm_phi**2)
+        term2 = (norm_phi - math.sin(norm_phi)) / (norm_phi**3)
+        phi_skew = skew(phi)
 
-
+        return np.eye(3) - term1 * phi_skew + term2 * phi_skew.dot(phi_skew) 

@@ -31,13 +31,13 @@ def synchnize_imu(t_imu, imu, t_uwb):
 
 if __name__ == "__main__":    
     dataset_path = "/home/wenda/repositories/util-uwb-dataset/dataset/flight-dataset/"
-    anchor_npz = dataset_path + "survey-results/anchor_const4.npz"
+    anchor_npz = dataset_path + "survey-results/anchor_const1.npz"
     # access the survey results
     anchor_survey = np.load(anchor_npz)
     anchor_position = anchor_survey['an_pos']
 
     # access rosbag file
-    ros_bag  = dataset_path + "rosbag-data/const4/const4-trial1-tdoa2-traj3.bag"
+    ros_bag  = dataset_path + "rosbag-data/const1/const1-trial1-tdoa2.bag"
     bag = rosbag.Bag(ros_bag)
 
     # -------------------- start extract the rosbag ------------------------ #
@@ -96,5 +96,5 @@ if __name__ == "__main__":
     t_sensor = (t_sensor - min_t).reshape(-1,1)
 
     # save t_sensor, imu, uwb, t_gt_pose, gt_pos, gt_quat 
-    np.savez('const4-trial1-traj3.npz', t_sensor = t_sensor, imu_syn = imu_syn, uwb = uwb,\
+    np.savez('const1-trial1.npz', t_sensor = t_sensor, imu_syn = imu_syn, uwb = uwb,\
              t_gt=t_gt_pose, gt_pos=gt_pos, gt_quat=gt_quat, An=anchor_position)

@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # address of the current script
     cwd = os.path.dirname(__file__)
     # load data
-    data = np.load(os.path.join(cwd, "dataset_npz/const4-trial1-traj1.npz"))
+    data = np.load(os.path.join(cwd, "dataset_npz/const1-trial1.npz"))
     # translation vector from the quadcopter to UWB tag
     t_uv = np.array([-0.01245, 0.00127, 0.0908]).reshape(-1,1) 
     t = data["t_sensor"];  imu = data["imu_syn"];      uwb = data["uwb"]

@@ -5,7 +5,8 @@ import numpy as np
 from scipy import linalg
 import math
 from pyquaternion import Quaternion
-
+import jaxlie as jxl
+from rot_util import rightJacob
 # ------------------ parameters ------------------ #
 # Process noise
 w_accxyz = 2.0;      w_gyro_rpy = 0.1    # rad/sec
@@ -18,6 +19,7 @@ e3 = np.array([0, 0, 1]).reshape(-1,1)
 class ESKF:
     '''initialization'''
     def __init__(self, X0, q0, P0, K):
+        print("Test the new IMU error prop\n")
         # Standard devirations of UWB meas. (tuning parameter)
         self.std_uwb_tdoa = np.sqrt(0.05)
         # external calibration: translation vector from the quadcopter to UWB tag
@@ -43,18 +45,11 @@ class ESKF:
         # current rotation matrix list (from body frame to inertial frame) 
         self.R = q0.rotation_matrix
 
-        # # Process noise
-        self.Fi = np.block([
-            [np.zeros((3,3)),   np.zeros((3,3))],
-            [np.eye(3),         np.zeros((3,3))],
-            [np.zeros((3,3)),   np.eye(3)      ]
-        ])
-
     '''ESKF prediction using IMU'''
     def predict(self, imu, dt, imu_check, k):
         # construct noise
-        Vi = (w_accxyz**2)*(dt**2)*np.eye(3)
-        Thetai = (w_gyro_rpy**2)*(dt**2)*np.eye(3)
+        Vi = (w_accxyz**2)*np.eye(3)
+        Thetai = (w_gyro_rpy**2)*np.eye(3)
         Qi = np.block([
             [Vi,               np.zeros((3,3)) ],
             [np.zeros((3,3)),  Thetai          ]
@@ -70,6 +65,12 @@ class ESKF:
             f_k = imu[0:3]                    # * GRAVITY_MAGNITUDE  # in simulation, acc is in m/s^2
             self.f[k] = f_k
             dw = omega_k * dt                      # Attitude error
+
+            # 
+            qk_1 = Quaternion(self.q_list[k-1,:])
+            # use the rotation matrix from timestep k-1
+            self.R = qk_1.rotation_matrix   
+
             # nominal state motion model
             # position prediction 
             self.Xpr[k,0:3] = self.Xpo[k-1, 0:3] + Vpo.T*dt + 0.5 * np.squeeze(self.R.dot(f_k.reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt**2
@@ -79,28 +80,53 @@ class ESKF:
             if self.Xpr[k, 2] < 0:  
                 self.Xpr[k, 2:6] = np.zeros((1,4))    
             # quaternion update
-            qk_1 = Quaternion(self.q_list[k-1,:])
             dqk  = Quaternion(self.zeta(dw))           # convert incremental rotation vector to quaternion
             q_pr = qk_1 * dqk                          # compute quaternion multiplication with package
             self.q_list[k,:] = np.array([q_pr.w, q_pr.x, q_pr.y, q_pr.z])  # save quaternion in q_list
             self.R_list[k]   = q_pr.rotation_matrix                        # save rotation prediction to R_list
             # error state covariance matrix 
-            # use the rotation matrix from timestep k-1
-            self.R = qk_1.rotation_matrix          
             # Jacobian matrix
             Fx = np.block([
                 [np.eye(3),         dt*np.eye(3),      -0.5*dt**2*self.R.dot(self.cross(f_k))],
                 [np.zeros((3,3)),   np.eye(3),         -dt*self.R.dot(self.cross(f_k))       ],
                 [np.zeros((3,3)),   np.zeros((3,3)),   linalg.expm(self.cross(dw)).T    ]            
             ])
+
+            # # Process noise
+            R_jxl_k = jxl.SO3.from_quaternion_xyzw(np.array([qk_1.x, qk_1.y, qk_1.z, qk_1.w]))   
+            # this is tested to be the same as using {axis,angle = axisAngle_from_rot(R), phi = axis * angle}
+            phi_k = jxl.SO3.log(R_jxl_k)     
+            Jr = rightJacob(phi_k)
+
+            Fi = np.block([
+                [0.5 * self.R * (dt**2),   np.zeros((3,3))],
+                [self.R * dt,              np.zeros((3,3))],
+                [np.zeros((3,3)),          self.R.T @ Jr *dt     ]
+            ])
             # Process noise matrix Fi, Qi are defined above
-            self.Ppr[k] = Fx.dot(self.Ppo[k-1]).dot(Fx.T) + self.Fi.dot(Qi).dot(self.Fi.T) 
+            self.Ppr[k] = Fx.dot(self.Ppo[k-1]).dot(Fx.T) + Fi.dot(Qi).dot(Fi.T) 
             # Enforce symmetry
             self.Ppr[k] = 0.5*(self.Ppr[k] + self.Ppr[k].T)  
 
         else:
+            qk_1 = Quaternion(self.q_list[k-1,:])
+            # use the rotation matrix from timestep k-1
+            self.R = qk_1.rotation_matrix  
+
+            # # Process noise
+            R_jxl_k = jxl.SO3.from_quaternion_xyzw(np.array([qk_1.x, qk_1.y, qk_1.z, qk_1.w]))   
+            # this is tested to be the same as using {axis,angle = axisAngle_from_rot(R), phi = axis * angle}
+            phi_k = jxl.SO3.log(R_jxl_k)     
+            Jr = rightJacob(phi_k)
+
+            Fi = np.block([
+                [0.5 * self.R * (dt**2),   np.zeros((3,3))],
+                [self.R * dt,              np.zeros((3,3))],
+                [np.zeros((3,3)),          self.R.T @ Jr *dt     ]
+            ])
+
             # if we don't have IMU data
-            self.Ppr[k] = self.Ppo[k-1] + self.Fi.dot(Qi).dot(self.Fi.T)
+            self.Ppr[k] = self.Ppo[k-1] + Fi.dot(Qi).dot(Fi.T)
             # Enforce symmetry
             self.Ppr[k] = 0.5*(self.Ppr[k] + self.Ppr[k].T)  
             
@@ -114,7 +140,6 @@ class ESKF:
             # velocity prediction
             self.Xpr[k,3:6] = self.Xpo[k-1, 3:6] + np.squeeze(self.R.dot(self.f[k].reshape(-1,1)) - GRAVITY_MAGNITUDE*e3) * dt
             # quaternion update
-            qk_1 = Quaternion(self.q_list[k-1,:])
             dqk  = Quaternion(self.zeta(dw))       # convert incremental rotation vector to quaternion
             q_pr = qk_1 * dqk                 # compute quaternion multiplication with package
             self.q_list[k] = np.array([q_pr.w, q_pr.x, q_pr.y, q_pr.z])    # save quaternion in q_list

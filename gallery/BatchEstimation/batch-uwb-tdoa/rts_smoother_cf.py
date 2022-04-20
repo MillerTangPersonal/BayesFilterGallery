@@ -77,7 +77,7 @@ class RTS_Smoother:
                 # input data at timestamp k
                 v_data_k = v_data[k,:];  w_data_k = w_data[k,:] # input at timestamp k
                 dt = t[k] - t[k-1]
-                Qv_k = self.robot.nv_prop(dt)
+                Qv_k = self.robot.nv_prop(X_op_k1,dt)
                 # compute ev_k
                 ev_k = self.compute_ev_k(X_op_k1, X_op_k, dt, v_data_k, w_data_k)
                 # print("k = {0}, ev_k = {1}\n".format(k, ev_k))

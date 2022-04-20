@@ -4,7 +4,9 @@
 import numpy as np
 from pyquaternion.quaternion import Quaternion
 from scipy import linalg
-from rot_util import skew, zeta
+from rot_util import skew, zeta, rightJacob
+import jaxlie as jxl
+
 np.set_printoptions(precision=4)
 
 class DroneModel:
@@ -19,19 +21,36 @@ class DroneModel:
         self.gravity = np.array([0, 0, 9.81]).reshape(-1,1)   # gravity vector
 
     '''propagate input noise'''
-    def nv_prop(self, dt):
+    def nv_prop(self, X_k1, dt ):
+        # convert quaternion to rotation matrix
+        q_k1 = Quaternion([X_k1[6], X_k1[7], X_k1[8], X_k1[9]])
+        R_k1 = q_k1.rotation_matrix
         # construct noise
-        Vi = (self.std_acc**2)*(dt**2)*np.eye(3)
-        Thetai = (self.std_gyro**2)*(dt**2)*np.eye(3)
+        Vi = (self.std_acc**2)*np.eye(3)
+        Thetai = (self.std_gyro**2)*np.eye(3)
         Qi = np.block([
             [Vi,               np.zeros((3,3)) ],
             [np.zeros((3,3)),  Thetai          ]
         ])
+
+        # Fi = np.block([
+        #     [np.zeros((3,3)),   np.zeros((3,3))],
+        #     [np.eye(3),         np.zeros((3,3))],
+        #     [np.zeros((3,3)),   np.eye(3)      ]
+        # ])
+
+        # test
+        R_jxl_k = jxl.SO3.from_quaternion_xyzw(np.array([q_k1.x, q_k1.y, q_k1.z, q_k1.w]))   
+        # this is tested to be the same as using {axis,angle = axisAngle_from_rot(R), phi = axis * angle}
+        phi_k = jxl.SO3.log(R_jxl_k)     
+        Jr = rightJacob(phi_k)
+
         Fi = np.block([
-            [np.zeros((3,3)),   np.zeros((3,3))],
-            [np.eye(3),         np.zeros((3,3))],
-            [np.zeros((3,3)),   np.eye(3)      ]
+            [0.5 * R_k1 * (dt**2),   np.zeros((3,3))],
+            [R_k1 * dt,              np.zeros((3,3))],
+            [np.zeros((3,3)),        R_k1 @ Jr *dt     ]
         ])
+
         Qv_k = Fi.dot(Qi).dot(Fi.T)
         return Qv_k
 

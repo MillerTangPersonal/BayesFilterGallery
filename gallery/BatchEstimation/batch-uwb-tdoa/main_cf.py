@@ -14,11 +14,9 @@ from scipy import interpolate
 from sklearn.metrics import mean_squared_error
 
 from robot_model import DroneModel
-
-from rts_smoother_cf import RTS_Smoother
-
+from rts_smoother_cf import RTS_Smoother         
 # help function in EKF
-from eskf_class_la import ESKF
+from eskf_la_test import ESKF
 from plot_util import plot_pos, plot_pos_err, plot_traj
 from rot_util import zeta
 
@@ -178,11 +176,11 @@ def visual_xyz(t_gt, gt_pos, t, X_final):
 
 
 if __name__ == "__main__":   
-    # address of the current script
+    # directory of the current script
     cwd = os.path.dirname(__file__)
     # load data
     # data = np.load(os.path.join(cwd, "data_npz/1130_simData.npz"))
-    data = np.load(os.path.join(cwd, "const4_traj3.npz"))
+    data = np.load(os.path.join(cwd, "dataset_npz/const1-trial1.npz"))
 
     t = data["t_sensor"];  imu = data["imu_syn"];      uwb = data["uwb"]
     t_gt = data["t_gt"];   gt_pos = data["gt_pos"];    gt_quat = data["gt_quat"]

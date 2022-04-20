@@ -54,7 +54,7 @@ class SE3BetweenFactorTwist(Factor):
         self.lin_var = lin_var
         self.ang_var = ang_var
         self.n_residuals = 6
-        self.n_parameters = 12
+        self.n_parameters = 6
 
     def get_error(self, param_blocks, residuals):
         T_prev = param_blocks[0].data

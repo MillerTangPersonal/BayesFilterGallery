@@ -42,6 +42,7 @@ class RTS_Smoother_3D:
         T = getTrans(C_op_k1, r_op_k1)
         T_in = getTrans_in(C_op_k, r_op_k)
         tau = Psi.dot(T).dot(T_in)
+        
         C_now = tau[0:3, 0:3]
         r_now = tau[0:3, 3]
         # Equ. (60) to compute J. Then, J * rho = r
