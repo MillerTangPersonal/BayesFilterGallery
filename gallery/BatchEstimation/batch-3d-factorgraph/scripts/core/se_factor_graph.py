@@ -7,7 +7,8 @@ from se_factors import *
 import time
 
 SOLVERS = ["GN", "LM"]
-
+np.set_printoptions(linewidth=10000)
+np.set_printoptions(precision=1)
 class SolverOptions:
     def __init__(self, solver, linear_solver="QR", iterations=5, cal_cov=False, lam=1.0):
         assert solver in SOLVERS, "Solver:" + solver + " not supported. Options:"  + ''.join(SOLVERS) 
@@ -131,9 +132,10 @@ class FactorGraph:
             start = time.process_time()
             self.linearize(J, W, residuals)
             print("Linearize took:", time.process_time() - start)
-            # import matplotlib.pyplot as plt
-            # plt.imshow(J, interpolation="nearest")
-            # plt.show()
+            print(J)
+            import matplotlib.pyplot as plt
+            plt.imshow(J, interpolation="nearest")
+            plt.show()
             A_ = np.dot(np.dot(np.transpose(J), W), J)
             b_ = -np.dot(np.dot(np.transpose(J), W), residuals)
             # do cholesky decompositoin

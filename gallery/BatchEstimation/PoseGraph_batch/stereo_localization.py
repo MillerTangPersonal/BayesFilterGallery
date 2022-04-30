@@ -9,8 +9,8 @@ from vis_util import visual_traj
 
 import numpy as np
 import scipy.io as sio
+from scipy import linalg
 import matplotlib.pyplot as plt
-
 
 data = sio.loadmat('./data/dataset3.mat')
 
@@ -27,21 +27,16 @@ ang_var = data["w_var"]
 vertices = []
 vertex_id_counter = 0
 
-# ------------- create a prior ------------- # 
-roll, pitch, yaw = data["theta_vk_i"][:, t_start];
-px, py, pz = data["r_i_vk_i"][:, t_start]; 
+# ------------- create a prior ------------- #
+axisAngle = data["theta_vk_i"][:, t_start];
+r_gt0     = data["r_i_vk_i"][:, t_start];
 
-# test with jaxlie
-# TODO: need to be tested carefully, rotation is not the same
-C_gt_test = jxl.SO3.from_rpy_radians(roll, pitch, yaw)
-C_gt0 = axisAngle_to_Rot(np.array([roll, pitch, yaw]))
-print(C_gt_test.as_matrix())
-print('\n')
-print(C_gt0)
-prior_gt = Pose3()
+C_gt0 = axisAngle_to_Rot(axisAngle)
+prior_gt = Pose3(getTrans(C_gt0, r_gt0))
 
-# ------------------------------------------ #
-options = SolverOptions("GN", iterations=3, cal_cov=True)
+# datastruture: SE3 is a numpy array [4x4]
+
+options = SolverOptions("GN", iterations=5, cal_cov=False)
 graph = FactorGraph(options);
 
 prior_vertex = Vertex.create(vertex_id_counter, prior_gt)
@@ -61,16 +56,36 @@ prev_vertex = prior_vertex
 
 for idx in range(t_start+1, t_end):
     # generate prior estimate
-    v = np.reshape(lin_vel[:, idx-1], -1)
-    w = np.reshape(ang_vel[:, idx-1], -1)
-    v_var = np.reshape(lin_var, -1)
+    v = lin_vel[:, idx-1]
+    w = ang_vel[:, idx-1]
+    v_var = np.reshape(lin_var, -1)   # 1x3
     w_var = np.reshape(ang_var, -1)
 
     t_curr = time_stamps[idx]
     dt = t_curr - t_prev
-
-    # TODO: careful about the convention
-    pass
+    # Pose graph motion model
+    input = np.block([-1.0 * v, -1.0 * w])    # shape of 6
+    rho = input[0:3].reshape(-1,1)
+    phi = input[3:6]
+    phi_skew = skew(phi)
+    zeta = np.block([
+        [phi_skew, rho],
+        [0,  0,  0,  0]])
+    Psi = linalg.expm(dt*zeta)
+    # --------------------------------------- #
+    curr_est = Pose3(Psi @ prev_vertex.data)
+    curr_vertex = Vertex.create(vertex_id_counter, curr_est)
+    bet_fac = SE3BetweenFactorTwist(v, w, v_var, w_var, dt)
+    # create a factor between current vertex and previous vertex
+    graph.add_vertex(curr_vertex)
+    # add the factor to problem
+    graph.add_factor([prev_vertex.id, curr_vertex.id], bet_fac)
+    # store vertices
+    vertices.append(curr_vertex)
+    # update t, prev_vertex, id_counter
+    t_prev = t_curr
+    prev_vertex = curr_vertex
+    vertex_id_counter += 1
 
 
 # parameters related to observation model
@@ -87,7 +102,7 @@ for idx in range(t_start, t_end):
     meas_datum = meas_data[:, idx, :]
     for meas_idx in range(np.shape(meas_datum)[1]):
         if not np.sum(meas_datum[:, meas_idx]) == -4:
-            stereo_factor = StereoFactor(cam_params, # intrinsic parameters 
+            stereo_factor = StereoFactor(cam_params, # intrinsic parameters
                 C_c_v,      # extrinsic rotation
                 rho_v_c_v,  # extrinsic translation
                 landmarks[:, meas_idx], # landmark positions
@@ -97,16 +112,18 @@ for idx in range(t_start, t_end):
     vertex_id_counter += 1
 
 graph.echo_info()
-graph.solve(); 
+graph.solve();
 
-# estimated traj. and ground_truth 
+# estimated traj. and ground_truth
 traj = np.zeros((len(vertices), 6), dtype=float)
 for idx, idy in enumerate(range(t_start, t_end)):
     gt = data['r_i_vk_i'][:, idy]
-    est = vertices[idx].translation()
+    #
+    est_C = vertices[idx].rotation_as_matrix()
+    est_r = -1.0 * est_C.T @ vertices[idx].translation()
     # print("Vertex:[%d] gt:[%.3f, %.3f, %.3f] est:[%.3f, %.3f, %.3f]"%(idx,
     #     gt[0], gt[1], gt[2], est[0], est[1], est[2]));
-    traj[idx, :] = [gt[0], gt[1], gt[2], est[0], est[1], est[2]]; 
+    traj[idx, :] = [gt[0], gt[1], gt[2], est_r[0], est_r[1], est_r[2]];
 
 print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[%.3f]"%(
     np.mean(traj[:,0] - traj[:,3]), np.std(traj[:,0] - traj[:,3]),
@@ -116,5 +133,3 @@ print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[
 visual_traj(traj, landmarks)
 
 plt.show()
-
-

@@ -14,12 +14,12 @@ class SolverOptions:
         self.solver = solver
         self.iterations = iterations
         self.cal_cov = cal_cov
-        self.lam = lam
+        self.lam = lam                       # for LevenbergMarquardt
         self.linear_solver = linear_solver
         print("Solver options:")
         print("Nonlinear solver:[%s] iterations:[%d] lam:[%.3f] linear solver:[%s]"%(self.solver,
             self.iterations, self.lam, self.linear_solver))
-    
+
 class FactorGraph:
     def __init__(self, _options):
         self.n_parameters = 0
@@ -59,7 +59,7 @@ class FactorGraph:
         self.factor_list.append(factor)
         self.factor_id += 1
         self.n_factors += 1
-        self.n_residuals += factor.n_residuals 
+        self.n_residuals += factor.n_residuals
 
     def echo_info(self):
         print("Problem has [%d] vertices with [%d] parameters and [%d] factors."%(self.n_vertices,
@@ -129,7 +129,7 @@ class FactorGraph:
             P_ = []
             # -------- linearize around current estimate
             start = time.process_time()
-            self.linearize(J,W_inv, residuals)
+            self.linearize(J, W_inv, residuals)
             print("Linearize took:", time.process_time() - start)
             # import matplotlib.pyplot as plt
             # plt.imshow(J, interpolation="nearest")
@@ -147,7 +147,7 @@ class FactorGraph:
             if self.options.cal_cov:
                 u_ = np.linalg.solve(L_, np.identity(self.n_residuals, dtype=float))
                 P_ = np.linalg.solve(L_.T, u_)
-            
+
             idy = 0
             start = time.process_time()
             for it in range(self.n_vertices):

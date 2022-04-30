@@ -41,10 +41,10 @@ class Vector2:
     def __init__(self, _data):
         self.data = _data
         self.type = BASE_TYPE.R2
-    
+
     def x(self):
         return self.data[0]
-    
+
     def y(self):
         return self.data[1]
 
@@ -60,7 +60,7 @@ class Pose2:
     def __init__(self, _data):
         self.type = BASE_TYPE.SE2
         self.data = _data
-    
+
 class Vector3:
     def __init__(self, _data):
         self.type = BASE_TYPE.R3
@@ -68,10 +68,10 @@ class Vector3:
 
     def x(self):
         return self.data[0]
-    
+
     def y(self):
         return self.data[1]
-    
+
     def z(self):
         return self.data[2]
 
@@ -86,19 +86,10 @@ class Rot3:
 class Pose3:
     def __init__(self, _data):
         self.type = BASE_TYPE.SE3
-        self.data = _data
-    
+        self.data = _data           # numpy array 4x4
+
     def translation(self):
-        return self.data.translation()
+        return self.data[0:3, 3].reshape(-1,1)
 
     def rotation(self):
-        return self.data.rotation()
-
-
-
-
-
-
-
-
-
+        return self.data[0:3, 0:3]

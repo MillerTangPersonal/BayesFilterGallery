@@ -13,9 +13,11 @@ import scipy.io as sio
 # from mpl_toolkits.mplot3d import Axes3D
 # from matplotlib import rc
 
+
 data = sio.loadmat('./data/dataset3.mat')
 
 t_start = 1214
+# t_end = 1216
 t_end = 1714
 # t_end = 1713
 
@@ -42,7 +44,7 @@ prior_gt = Pose3(
 
 print(prior_gt.rotation().as_matrix())
 
-options = SolverOptions("GN", iterations=3, cal_cov=True)
+options = SolverOptions("GN", iterations=3, cal_cov=False)
 graph = FactorGraph(options);
 
 prior_vertex = Vertex.create(vertex_id_counter, prior_gt)

@@ -70,6 +70,7 @@ class SE3BetweenFactorTwist(Factor):
 
         J[0][:,:] = np.identity(self.n_residuals, dtype=float)
         J[1][:,:] = -1 * (T_prev.inverse() @ T_curr).adjoint()
+        
         return True
 
     def get_covariance(self, covariance):
