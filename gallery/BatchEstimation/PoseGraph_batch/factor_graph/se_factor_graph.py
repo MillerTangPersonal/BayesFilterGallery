@@ -38,7 +38,7 @@ class FactorGraph:
             # print("Adding new vertex: id:[%d] type:[%s]"%(vertex.id,
                 # type_as_string(vertex.type)))
             self.vertices[vertex.id] = vertex
-            self.n_parameters += vertex.n_parameters;
+            self.n_parameters += vertex.n_parameters
             self.n_vertices += 1
         else:
             print("Vertex already exists.")
@@ -54,7 +54,7 @@ class FactorGraph:
                 return
 
         # print("Adding factor ")
-        factor.id = self.factor_id;
+        factor.id = self.factor_id
         self.factor_vertex_map[factor.id] = vertex_ids
         self.factor_list.append(factor)
         self.factor_id += 1
