@@ -28,16 +28,16 @@ vertices = []
 vertex_id_counter = 0
 
 # ------------- create a prior ------------- #
-axisAngle = data["theta_vk_i"][:, t_start];
-r_gt0     = data["r_i_vk_i"][:, t_start];
+axisAngle = data["theta_vk_i"][:, t_start] # C_v0_i
+r_gt0     = data["r_i_vk_i"][:, t_start]   # r_i^{v0i}
 
-C_gt0 = axisAngle_to_Rot(axisAngle)
-prior_gt = Pose3(getTrans(C_gt0, r_gt0))
+C_gt0 = axisAngle_to_Rot(axisAngle)        # C_v0_i
+prior_gt = Pose3(getTrans(C_gt0, r_gt0))   # T_v0_i
 
 # datastruture: SE3 is a numpy array [4x4]
 
 options = SolverOptions("GN", iterations=5, cal_cov=False)
-graph = FactorGraph(options);
+graph = FactorGraph(options)
 
 prior_vertex = Vertex.create(vertex_id_counter, prior_gt)
 prior_factor = SE3PriorFactor(prior_gt, 0.1*np.ones((6,), dtype=float))
@@ -64,7 +64,7 @@ for idx in range(t_start+1, t_end):
     t_curr = time_stamps[idx]
     dt = t_curr - t_prev
     # Pose graph motion model
-    input = np.block([-1.0 * v, -1.0 * w])    # shape of 6
+    input = np.block([-1.0 * v, -1.0 * w])    # shape of (6,)
     rho = input[0:3].reshape(-1,1)
     phi = input[3:6]
     phi_skew = skew(phi)
@@ -112,7 +112,7 @@ for idx in range(t_start, t_end):
     vertex_id_counter += 1
 
 graph.echo_info()
-graph.solve();
+graph.solve()
 
 # estimated traj. and ground_truth
 traj = np.zeros((len(vertices), 6), dtype=float)
@@ -123,7 +123,7 @@ for idx, idy in enumerate(range(t_start, t_end)):
     est_r = -1.0 * est_C.T @ vertices[idx].translation()
     # print("Vertex:[%d] gt:[%.3f, %.3f, %.3f] est:[%.3f, %.3f, %.3f]"%(idx,
     #     gt[0], gt[1], gt[2], est[0], est[1], est[2]));
-    traj[idx, :] = [gt[0], gt[1], gt[2], est_r[0], est_r[1], est_r[2]];
+    traj[idx, :] = [gt[0], gt[1], gt[2], est_r[0], est_r[1], est_r[2]]
 
 print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[%.3f]"%(
     np.mean(traj[:,0] - traj[:,3]), np.std(traj[:,0] - traj[:,3]),

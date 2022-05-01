@@ -97,8 +97,13 @@ class SE3BetweenFactorTwist(Factor):
         # so that r_op = -1.0 * C_op.T @ (-C_op @ r_op)
 
         # can be replaced by T_op_k1 and T_op_k
-        C_op_k1 = T_op_k1[0:3, 0:3];  r_op_k1 = -1.0 * C_op_k1.T @ T_op_k1[3, 0:3]
-        C_op_k  = T_op_k[0:3, 0:3];   r_op_k  = -1.0 * C_op_k.T @ T_op_k[3, 0:3]
+        C_op_k1 = T_op_k1[0:3, 0:3];  #r_op_k1 = -1.0 * C_op_k1.T @ T_op_k1[3, 0:3]
+        C_op_k  = T_op_k[0:3, 0:3];   #r_op_k  = -1.0 * C_op_k.T @ T_op_k[3, 0:3]
+        
+        
+        r_op_k1 = -1.0 * C_op_k1.T @ T_op_k1[0:3, 3]
+        r_op_k  = -1.0 * C_op_k.T @ T_op_k[0:3, 3]
+        
         T_k1 = getTrans(C_op_k1, r_op_k1)
         T_k_in = getTrans_in(C_op_k, r_op_k)
         tau = Psi @ T_k1 @ T_k_in
