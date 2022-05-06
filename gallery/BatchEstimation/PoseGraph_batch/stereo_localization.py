@@ -35,8 +35,9 @@ C_gt0 = axisAngle_to_Rot(axisAngle)        # C_v0_i
 prior_gt = Pose3(getTrans(C_gt0, r_gt0))   # T_v0_i
 
 # datastruture: SE3 is a numpy array [4x4]
-
-options = SolverOptions("GN", iterations=5, cal_cov=False)
+# solver = "GN" or "LM"
+# linear_solver = "QR" or "Cholesky"
+options = SolverOptions(solver="LM", iterations=5, linear_solver = "Cholesky", cal_cov=False)   
 graph = FactorGraph(options)
 
 prior_vertex = Vertex.create(vertex_id_counter, prior_gt)

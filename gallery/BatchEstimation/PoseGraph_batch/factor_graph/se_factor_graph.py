@@ -118,7 +118,7 @@ class FactorGraph:
 
     def GaussNewtonSolver(self):
         for iteration in range(self.options.iterations):
-            print("Gauss Newton Iteration:[%d]"%iteration)
+            print("Gauss Newton, Iteration:[%d]"%iteration)
             # jacobian
             J = np.zeros((self.n_residuals, self.n_parameters), dtype=float)
             # inverse covariance/information
@@ -165,8 +165,66 @@ class FactorGraph:
 
 
     def LevenbergMarquardt(self):
-        pass
+        for iteration in range(self.options.iterations):
 
+            # TODO: Adjust lambda
+            print("Levenberg-Marquardt, Iteration:[%d]"%iteration)
+            # jacobian
+            J = np.zeros((self.n_residuals, self.n_parameters), dtype=float)
+            # inverse covariance
+            W_inv = np.identity(self.n_residuals, dtype=float)
+            # vector of residuals
+            residuals = np.zeros((self.n_residuals,), dtype=float)
+            # estimated covariance
+            P_ = []
+            # linearize around current estimate
+            start = time.process_time()
+            self.linearize(J, W_inv, residuals)
+            print("Linearize took:", time.process_time() - start)
+
+            A_ = J.T @ W_inv @ J
+            # LM
+            A_ += (self.options.lam * np.identity(A_.shape[0]))
+            # residuals
+            b_ = J.T @ W_inv @ residuals
+            # 
+            if self.options.linear_solver == "QR":
+                # QR decomposition
+                Q_, R_ = np.linalg.qr(A_)
+                # forward pass
+                d_ = Q_.T @ b_
+                # backward pass
+                delta = np.linalg.solve(R_, d_)
+                # TODO: solve for covariance
+                if self.options.cal_cov:
+                    u_ = np.linalg.solve(R_, np.identity(self.n_residuals, dtype=float))
+                    P_ = np.linalg.solve(R_.T, u_)
+            elif self.options.linear_solver == "Cholesky":
+                # choleskey decomposition
+                L_ = np.linalg.cholesky(A_)
+                # forward pass
+                d_ = np.linalg.solve(L_, b_)
+                # backward pass
+                delta = np.linalg.solve(L_.T, d_)
+                # solve for covariance
+                if self.options.cal_cov:
+                    u_ = np.linalg.solve(L_, np.identity(self.n_residuals, dtype=float))
+                    P_ = np.linalg.solve(L_.T, u_)                    
+
+            idy = 0
+            start = time.process_time()
+            for it in range(self.n_vertices):
+                offset = self.vertices[it].n_parameters
+                # print("Vertex:", it," delta:", delta[idy : idy+offset])
+                self.vertices[it].update(delta[idy : idy + offset])
+                if self.options.cal_cov and len(P_) > 0:
+                    print("Not implemented yet")
+                    #self.vertices[it].update_cov(delta[i_:j_])
+                idy += offset
+            print("Update took:", time.process_time() - start)
+            loss = self.loss()
+            print("Loss:", loss)
+ 
 
     def solve(self):
         if self.options.solver == "GN":
