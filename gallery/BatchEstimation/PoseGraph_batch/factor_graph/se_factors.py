@@ -2,7 +2,7 @@
 import numpy as np
 from scipy import linalg
 import math
-from se_utils import skew, getTrans, getTrans_in, circle, axisAngle_from_rot
+from se_utils import skew, circle, axisAngle_from_rot
 
 class Factor:
     def __init__(self):
@@ -85,7 +85,7 @@ class SE3BetweenFactorTwist(Factor):
         T_op_k1 = param_blocks[0].data      # operating point at time k-1
         T_op_k  = param_blocks[1].data      # operating point at time k
 
-        input = np.block([-self.lin_vel, -self.ang_vel])
+        input = np.block([self.lin_vel, self.ang_vel])
         rho = input[0:3].reshape(-1,1)
         phi = input[3:6]
         phi_skew = skew(phi)
@@ -93,20 +93,7 @@ class SE3BetweenFactorTwist(Factor):
             [phi_skew, rho],
             [0,  0,  0,  0]])
         Psi = linalg.expm(self.dt*zeta)
-        # T_op = [C_op, -C_op @ r_op]
-        # so that r_op = -1.0 * C_op.T @ (-C_op @ r_op)
-
-        # can be replaced by T_op_k1 and T_op_k
-        C_op_k1 = T_op_k1[0:3, 0:3];  #r_op_k1 = -1.0 * C_op_k1.T @ T_op_k1[3, 0:3]
-        C_op_k  = T_op_k[0:3, 0:3];   #r_op_k  = -1.0 * C_op_k.T @ T_op_k[3, 0:3]
-        
-        
-        r_op_k1 = -1.0 * C_op_k1.T @ T_op_k1[0:3, 3]
-        r_op_k  = -1.0 * C_op_k.T @ T_op_k[0:3, 3]
-        
-        T_k1 = getTrans(C_op_k1, r_op_k1)
-        T_k_in = getTrans_in(C_op_k, r_op_k)
-        tau = Psi @ T_k1 @ T_k_in
+        tau = Psi @ T_op_k1 @ np.linalg.inv(T_op_k)
 
         C_now = tau[0:3, 0:3]
         r_now = tau[0:3, 3]
@@ -137,13 +124,8 @@ class SE3BetweenFactorTwist(Factor):
         # Ad = [ [C, r_skew @ C] [0, C] ]
         T_op_k1 = param_blocks[0].data         # operating point at time k-1
         T_op_k  = param_blocks[1].data         # operating point at time k
-        # TODO: improve this part with jxl.adjoint()
-        C_op_k1 = T_op_k1[0:3, 0:3];  r_op_k1 = T_op_k1[3, 0:3]
-        C_op_k  = T_op_k[0:3, 0:3];   r_op_k  = T_op_k[3, 0:3]
-        #
-        T = getTrans(C_op_k, r_op_k)
-        T_in = getTrans_in(C_op_k1, r_op_k1)
-        tau = T.dot(T_in)
+        tau = T_op_k @ np.linalg.inv(T_op_k1)
+
         C_now = tau[0:3, 0:3]
         r_now = tau[0:3, 3]
         r_skew = skew(r_now)
@@ -214,10 +196,7 @@ class StereoFactor(Factor):
         D = np.block([[np.eye(3)],
                 [0, 0, 0]])
 
-        # can be replaced by  param_blocks[0].data
-        T = getTrans(C_op, r_op)
-
-        pose = T @ Pj
+        pose = T_op @ Pj
         four_by_six = circle(pose)
         first_lin = self.C_c_v.dot(D.T).dot(four_by_six)
 

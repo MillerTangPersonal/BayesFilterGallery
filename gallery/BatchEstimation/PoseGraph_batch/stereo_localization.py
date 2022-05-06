@@ -4,7 +4,7 @@ from factor_graph.se_data_types import *
 from factor_graph.se_vertex import *
 from factor_graph.se_factors import *
 from factor_graph.se_factor_graph import *
-from factor_graph.se_utils import axisAngle_to_Rot
+from factor_graph.se_utils import axisAngle_to_Rot, getTrans
 from vis_util import visual_traj
 
 import numpy as np
@@ -56,15 +56,16 @@ prev_vertex = prior_vertex
 
 for idx in range(t_start+1, t_end):
     # generate prior estimate
-    v = lin_vel[:, idx-1]
-    w = ang_vel[:, idx-1]
+    # follow prof. Barfoot's convention
+    v = -1.0 * lin_vel[:, idx-1] 
+    w = -1.0 * ang_vel[:, idx-1]
     v_var = np.reshape(lin_var, -1)   # 1x3
     w_var = np.reshape(ang_var, -1)
 
     t_curr = time_stamps[idx]
     dt = t_curr - t_prev
     # Pose graph motion model
-    input = np.block([-1.0 * v, -1.0 * w])    # shape of (6,)
+    input = np.block([v, w])    # shape of (6,)
     rho = input[0:3].reshape(-1,1)
     phi = input[3:6]
     phi_skew = skew(phi)
