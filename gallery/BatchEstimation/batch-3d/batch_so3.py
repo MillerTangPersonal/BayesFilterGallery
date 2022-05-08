@@ -97,8 +97,8 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax1.plot(t,Er[0,:],color='steelblue',linewidth=1.9, alpha=0.9)
     ax1.plot(t,3*var_r[0,:],color='red',linewidth=1.9, alpha=0.9)
     ax1.plot(t,-3*var_r[0,:],color='red',linewidth=1.9, alpha=0.9)
-    ax1.plot(t,3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
-    ax1.plot(t,-3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax1.plot(t,3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax1.plot(t,-3*var_r_f[0,:],color='green',linewidth=1.9, alpha=0.9)
     plt.title("error in x")
 
     fig2 = plt.figure(facecolor="white")
@@ -106,8 +106,8 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax2.plot(t,Er[1,:],color='steelblue',linewidth=1.9, alpha=0.9)
     ax2.plot(t,3*var_r[1,:],color='red',linewidth=1.9, alpha=0.9)
     ax2.plot(t,-3*var_r[1,:],color='red',linewidth=1.9, alpha=0.9)
-    ax2.plot(t,3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
-    ax2.plot(t,-3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax2.plot(t,3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax2.plot(t,-3*var_r_f[1,:],color='green',linewidth=1.9, alpha=0.9)
     plt.title("error in y")
 
     fig3 = plt.figure(facecolor="white")
@@ -115,8 +115,8 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax3.plot(t,Er[2,:],color='steelblue',linewidth=1.9, alpha=0.9)
     ax3.plot(t,3*var_r[2,:],color='red',linewidth=1.9, alpha=0.9)
     ax3.plot(t,-3*var_r[2,:],color='red',linewidth=1.9, alpha=0.9)
-    ax3.plot(t,3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
-    ax3.plot(t,-3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax3.plot(t,3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax3.plot(t,-3*var_r_f[2,:],color='green',linewidth=1.9, alpha=0.9)
     plt.title("error in z")
 
 
@@ -125,8 +125,8 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax4.plot(t,Eth[0,:],color='steelblue',linewidth=1.9, alpha=0.9)
     ax4.plot(t,3*var_th[0,:],color='red',linewidth=1.9, alpha=0.9)
     ax4.plot(t,-3*var_th[0,:],color='red',linewidth=1.9, alpha=0.9)
-    ax4.plot(t,3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
-    ax4.plot(t,-3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax4.plot(t,3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax4.plot(t,-3*var_th_f[0,:],color='green',linewidth=1.9, alpha=0.9)
     plt.title("error in theta 1")
 
     fig5 = plt.figure(facecolor="white")
@@ -134,8 +134,8 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax5.plot(t,Eth[1,:],color='steelblue',linewidth=1.9, alpha=0.9)
     ax5.plot(t,3*var_th[1,:],color='red',linewidth=1.9, alpha=0.9)
     ax5.plot(t,-3*var_th[1,:],color='red',linewidth=1.9, alpha=0.9)
-    ax5.plot(t,3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
-    ax5.plot(t,-3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax5.plot(t,3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax5.plot(t,-3*var_th_f[1,:],color='green',linewidth=1.9, alpha=0.9)
     plt.title("error in theta 2")
 
     fig6 = plt.figure(facecolor="white")
@@ -143,8 +143,8 @@ def visual_results(C_gt, r_gt, C_op, r_op, t, smoother, K):
     ax6.plot(t,Eth[2,:],color='steelblue',linewidth=1.9, alpha=0.9)
     ax6.plot(t,3*var_th[2,:],color='red',linewidth=1.9, alpha=0.9)
     ax6.plot(t,-3*var_th[2,:],color='red',linewidth=1.9, alpha=0.9)
-    ax6.plot(t,3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
-    ax6.plot(t,-3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax6.plot(t,3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
+    # ax6.plot(t,-3*var_th_f[2,:],color='green',linewidth=1.9, alpha=0.9)
     plt.title("error in theta 3")
 
     plt.show()

@@ -1,11 +1,13 @@
 import sys
+
+from numpy import dtype
 sys.path.append("./factor_graph")
 from factor_graph.se_data_types import *
 from factor_graph.se_vertex import *
 from factor_graph.se_factors import *
 from factor_graph.se_factor_graph import *
 from factor_graph.se_utils import axisAngle_to_Rot, getTrans
-from vis_util import visual_traj
+from vis_util import visual_traj, visual_est
 
 import numpy as np
 import scipy.io as sio
@@ -37,7 +39,7 @@ prior_gt = Pose3(getTrans(C_gt0, r_gt0))   # T_v0_i
 # datastruture: SE3 is a numpy array [4x4]
 # solver = "GN" or "LM"
 # linear_solver = "QR" or "Cholesky"
-options = SolverOptions(solver="GN", iterations=5, linear_solver = "Cholesky", cal_cov=True)   
+options = SolverOptions(solver="GN", iterations=6, linear_solver = "Cholesky", cal_cov=True)   
 graph = FactorGraph(options)
 
 prior_vertex = Vertex.create(vertex_id_counter, prior_gt)
@@ -117,7 +119,9 @@ graph.echo_info()
 graph.solve()
 
 # estimated traj. and ground_truth
-traj = np.zeros((len(vertices), 6), dtype=float)
+traj    = np.zeros((len(vertices), 6), dtype=float)
+pos_err = np.zeros((len(vertices), 3), dtype=float)
+Ppo     = np.zeros((len(vertices), 6, 6), dtype=float)
 for idx, idy in enumerate(range(t_start, t_end)):
     gt = data['r_i_vk_i'][:, idy]
     #
@@ -126,6 +130,8 @@ for idx, idy in enumerate(range(t_start, t_end)):
     # print("Vertex:[%d] gt:[%.3f, %.3f, %.3f] est:[%.3f, %.3f, %.3f]"%(idx,
     #     gt[0], gt[1], gt[2], est[0], est[1], est[2]));
     traj[idx, :] = [gt[0], gt[1], gt[2], est_r[0], est_r[1], est_r[2]]
+    pos_err[idx,:] = [gt[0] - est_r[0], gt[1] - est_r[1], gt[2] - est_r[2]]
+    Ppo[idx,:,:] = vertices[idx].var
 
 print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[%.3f]"%(
     np.mean(traj[:,0] - traj[:,3]), np.std(traj[:,0] - traj[:,3]),
@@ -133,5 +139,5 @@ print("Error: x: mu:[%.3f] std:[%.3f] y: mu:[%.3f] std:[%.3f] z: mu:[%.3f] std:[
     np.mean(traj[:,2] - traj[:,5]), np.std(traj[:,2] - traj[:,5])))
 
 visual_traj(traj, landmarks)
-
+visual_est(time_stamps[t_start:t_end], pos_err, Ppo)
 plt.show()

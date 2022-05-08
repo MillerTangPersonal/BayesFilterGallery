@@ -1,6 +1,7 @@
 # import jaxlie as jxl
 import numpy as np
 from scipy import linalg
+import math
 from se_data_types import BASE_TYPE, type_as_string
 from se_utils import skew, axisAngle_from_rot
 
