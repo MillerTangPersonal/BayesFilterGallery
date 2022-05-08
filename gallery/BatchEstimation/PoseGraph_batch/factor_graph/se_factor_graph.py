@@ -145,9 +145,41 @@ class FactorGraph:
 
             # solve for covariance
             if self.options.cal_cov:
-                u_ = np.linalg.solve(L_, np.identity(self.n_residuals, dtype=float))
-                P_ = np.linalg.solve(L_.T, u_)
-
+                
+                tic = time.time()                                             #### Delete this line after testing
+                A_inv_ = np.linalg.inv(A_)                                    #### Delete this line after testing
+                print("\nDirect inverse of A Took: ", time.time() - tic, 's') #### Delete this line after testing
+                toc = time.time()                                             #### Delete this line after testing
+                
+                
+                P_list_ = [] # note: the P matrix stored in this list is in a reverse order, i.e., P_K, P_K-1, ..., P_1
+                n_rows, n_cols = L_.shape # extract the shape of the L_ matrix
+                # the final P block only relates to the bottom right block in the L_ matrix
+                offset = self.vertices[self.n_vertices-1].n_parameters # offset related to the final vertex
+                L_k_inv_ = L_[n_rows-offset:n_rows, n_cols-offset:n_cols] # extract the bottom-right block from L_
+                L_k_inv_ = np.linalg.inv(L_k_inv_) # inverse of bottom right block in L_ matrix
+                P_list_.append(L_k_inv_.T @ L_k_inv_) # append to the storage list, P_k's are stored in a reversed order!
+                for it in reversed(range(0, self.n_vertices-1)): # this will start at self.n_vertices-2, and ends at 0
+                    offset = self.vertices[it].n_parameters # offset related to the it^th vertex
+                    L_k_inv_ = np.linalg.inv(L_[offset*it:offset*it+offset, offset*it:offset*it+offset])
+                    L_k_k_1_ = L_[offset*it+offset : offset*(it+2), offset*it : offset*it+offset] # the block below L_k_inv_
+                    P_list_.append(L_k_inv_.T @ (np.identity(offset)+ L_k_k_1_.T @ P_list_[-1] @ L_k_k_1_) @ L_k_inv_)
+                   
+                   
+                   
+                print("TDB method Took: ", time.time() - toc, 's')           #### Delete this line after testing
+                
+                ########### Delete the following block of code after testing ################
+                ## Checking accuracy against direct inverse of A
+                dif = 0.0
+                for it in range(0, self.n_vertices):
+                    offset = self.vertices[it].n_parameters
+                    len_P_list = len(P_list_)
+                    dif += np.abs(np.sum( A_inv_[it*offset : it*offset+offset, it*offset : it*offset+offset] - P_list_[len_P_list-it-1]))
+                print("\nThe sum of absolute difference between direct inverse method and TDB method: ", dif,"\n")
+                ########### Delete the above block of code after testing ################
+                
+            
             idy = 0
             start = time.process_time()
             for it in range(self.n_vertices):
