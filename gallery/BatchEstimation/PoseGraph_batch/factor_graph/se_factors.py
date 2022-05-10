@@ -137,7 +137,7 @@ class SE3BetweenFactorTwist(Factor):
         return True
 
     def get_covariance(self, covariance):
-        var = np.concatenate((self.lin_var, self.ang_var), axis=0) * self.dt;
+        var = np.concatenate((self.lin_var, self.ang_var), axis=0) * self.dt * self.dt
         covariance[:,:] = np.diag(np.reciprocal(var))
         return True
 
