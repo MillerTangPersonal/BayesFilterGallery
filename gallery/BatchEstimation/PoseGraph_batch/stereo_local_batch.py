@@ -2,7 +2,6 @@
     stereo camera based localization using pose graph bacth estimation
 '''
 import sys
-
 from numpy import dtype
 sys.path.append("./factor_graph")
 from factor_graph.se_data_types import *

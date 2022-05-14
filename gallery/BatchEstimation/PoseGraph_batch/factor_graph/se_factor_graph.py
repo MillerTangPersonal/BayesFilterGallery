@@ -63,44 +63,6 @@ class FactorGraph:
         self.n_residuals += factor.n_residuals
 
 
-    def remove_vertex(self, vertex):
-        if vertex.id in self.vertices:
-            # pop vertices using key od dict.
-            self.vertices.pop(vertex.id)
-            self.n_parameters -= vertex.n_parameters
-            self.n_vertices -= 1
-        else:
-            print("Vertex does not exist.")
-
-    def remove_factor(self, vertex):
-        # TODO: not considering loop-closure for now
-        # remove all the factor connected to vertex.id
-        vertex_id = [vertex.id]          
-
-        vertex_list1 = [vertex.id - 1, vertex.id]
-        vertex_list2 = [vertex.id,     vertex.id + 1]
-
-        # find factor id: get key from values
-        v_id1 = list(self.factor_vertex_map.values()).index(vertex_id)
-        factor_id1 = list(self.factor_vertex_map.keys())[v_id1]
-        self.factor_vertex_map.pop(factor_id1)
-
-        v_id2 = list(self.factor_vertex_map.values()).index(vertex_list1)
-        factor_id2 = list(self.factor_vertex_map.keys())[v_id2]
-        self.factor_vertex_map.pop(factor_id2)
-
-        v_id3 = list(self.factor_vertex_map.values()).index(vertex_list2)
-        factor_id3 = list(self.factor_vertex_map.keys())[v_id3]
-        self.factor_vertex_map.pop(factor_id3)
-
-        # remove factors from list using factor id
-        for factor in self.factor_list:
-            if factor.id in [factor_id1, factor_id2, factor_id3]:
-                self.factor_list.remove(factor)      
-                self.n_factors -= 1
-                self.n_residuals -= factor.n_residuals
-
-
     def echo_info(self):
         print("Problem has [%d] vertices with [%d] parameters and [%d] factors."%(self.n_vertices,
             self.n_parameters, self.n_factors))
