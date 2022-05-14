@@ -1,3 +1,6 @@
+'''
+    stereo camera based localization using pose graph bacth estimation
+'''
 import sys
 
 from numpy import dtype
@@ -30,13 +33,13 @@ vertices = []
 vertex_id_counter = 0
 
 # ------------- create a prior ------------- #
-axisAngle = data["theta_vk_i"][:, t_start] # C_v0_i
-r_gt0     = data["r_i_vk_i"][:, t_start]   # r_i^{v0i}
+axisAngle = data["theta_vk_i"][:, t_start]   # C_v0_i
+r_gt0     = data["r_i_vk_i"][:, t_start]     # r_i^{v0i}
 
-C_gt0 = axisAngle_to_Rot(axisAngle)        # C_v0_i
-prior_gt = Pose3(getTrans(C_gt0, r_gt0))   # T_v0_i
+C_gt0 = axisAngle_to_Rot(axisAngle)          # C_v0_i
+prior_gt = Pose3(getTrans(C_gt0, r_gt0))     # T_v0_i
 
-# datastruture: SE3 is a numpy array [4x4]
+# data struture: SE3 is a numpy array [4x4]
 # solver = "GN" or "LM"
 # linear_solver = "QR" or "Cholesky"
 options = SolverOptions(solver="GN", iterations=6, linear_solver = "Cholesky", cal_cov=True)   
@@ -115,6 +118,7 @@ for idx in range(t_start, t_end):
             graph.add_factor(vertex_id_counter, stereo_factor)
     vertex_id_counter += 1
 
+# solve factor graph
 graph.echo_info()
 graph.solve()
 
