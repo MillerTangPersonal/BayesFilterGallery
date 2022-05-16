@@ -67,7 +67,11 @@ class SE3PriorFactor(Factor):
 
     def get_covariance(self, covariance):
         assert np.shape(covariance) == (6,6)
-        covariance[:,:] = np.diag(np.reciprocal(self.var))
+        # if the covariance matrix of the prior is given, then use the covariance matrix
+        if self.var.shape == (6, 6):
+            covariance[:,:] = np.linalg.inv(self.var)
+        else: # if the covariance matrix is not given, then assume a diagonal matrix with variance values
+            covariance[:,:] = np.diag(np.reciprocal(self.var))
         return True
 
 class SE3BetweenFactorTwist(Factor):
