@@ -10,12 +10,7 @@ a.append(3)
 
 chunk = [2,3]
 
-for factor in a:
-    # print(f_id)
-    # print(factor)
-    # print("\n")
-    if factor in chunk:
-        print(factor)
 
 
 
+print(np.diag(0.00001*np.ones(6, dtype=float)))

@@ -91,10 +91,11 @@ class FactorGraph:
 
             factor.get_error(param_blocks, residuals[row_i:row_j])
             factor.get_jacobian(param_blocks, jacobian_blocks)
-            factor.get_covariance(W_inv[row_i:row_j, row_i:row_j])
+            factor.get_covariance_inv(W_inv[row_i:row_j, row_i:row_j])
             row_counter += factor.n_residuals
 
     def loss(self):
+        # TODO: modify the loss function to optimization step so as to check convergence
         residuals = np.zeros((self.n_residuals,), dtype=float)
         vi_map = {}
         idy = 0

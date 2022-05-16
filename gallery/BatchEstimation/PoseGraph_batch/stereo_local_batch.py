@@ -12,7 +12,7 @@ from factor_graph.se_utils import axisAngle_to_Rot, getTrans
 from vis_util import visual_traj, visual_est
 
 import numpy as np
-import scipy.io as sio
+import scipy.io as sio;
 from scipy import linalg
 import matplotlib.pyplot as plt
 
@@ -45,7 +45,7 @@ options = SolverOptions(solver="GN", iterations=6, linear_solver = "Cholesky", c
 graph = FactorGraph(options)
 
 prior_vertex = Vertex.create(vertex_id_counter, prior_gt)
-prior_factor = SE3PriorFactor(prior_gt, 0.1*np.ones((6,), dtype=float))
+prior_factor = SE3PriorFactor(prior_gt, np.diag(0.1*np.ones(6,dtype=float)))
 
 # prior vertex
 graph.add_vertex(prior_vertex)

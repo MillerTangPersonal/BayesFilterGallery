@@ -73,14 +73,14 @@ for t_idx in range(t_start, t_final):
         
         # define a small covariance for the very first prior, small covariance means less uncertain
         # first prior is from groundtruth -> small uncertainty
-        prior_cov_init = 0.00001*np.ones(6, dtype=float) # 1e-5 -> ~3 mm uncertainty for vicon
+        prior_cov_init = np.diag(0.00001*np.ones(6, dtype=float)) # 1e-5 -> ~3 mm uncertainty for vicon
         prior_vertex.var = prior_cov_init
     else:
         # if not the first graph, using the second vertex in the vertices list to be the prior
-        prior_v = Pose3(vertices[1].data) # the second vertex from previous graph        
+        prior_v = Pose3(vertices[1].data)                          # the second vertex from previous graph        
         prior_vertex = Vertex.create(vertex_id_counter, prior_v)
-        if (np.all((vertices[1].var== 0))): # if no covariance was calculated for the prior vertex
-            prior_vertex.var = 0.0001*np.ones(6, dtype=float) # a small cov (~1cm) to avoid error
+        if (np.all((vertices[1].var== 0))):                        # if no covariance was calculated for the prior vertex
+            prior_vertex.var = np.diag(0.0001*np.ones(6, dtype=float))      # a small cov (~1cm) to avoid error
         else:
             prior_vertex.set_cov(vertices[1].var)
         

@@ -65,13 +65,11 @@ class SE3PriorFactor(Factor):
         J[0][:,:] = np.identity(self.n_residuals, dtype = float)
         return True
 
-    def get_covariance(self, covariance):
-        assert np.shape(covariance) == (6,6)
-        # if the covariance matrix of the prior is given, then use the covariance matrix
-        if self.var.shape == (6, 6):
-            covariance[:,:] = np.linalg.inv(self.var)
-        else: # if the covariance matrix is not given, then assume a diagonal matrix with variance values
-            covariance[:,:] = np.diag(np.reciprocal(self.var))
+    def get_covariance_inv(self, covariance_inv):
+        assert np.shape(covariance_inv) == (6,6)
+
+        covariance_inv[:,:] = np.linalg.inv(self.var)
+
         return True
 
 class SE3BetweenFactorTwist(Factor):
@@ -140,9 +138,9 @@ class SE3BetweenFactorTwist(Factor):
         J[1][:,:] = np.identity(self.n_residuals, dtype=float)
         return True
 
-    def get_covariance(self, covariance):
+    def get_covariance_inv(self, covariance_inv):
         var = np.concatenate((self.lin_var, self.ang_var), axis=0) * self.dt * self.dt
-        covariance[:,:] = np.diag(np.reciprocal(var))
+        covariance_inv[:,:] = np.diag(np.reciprocal(var))
         return True
 
 
@@ -214,7 +212,7 @@ class StereoFactor(Factor):
 
         return True
 
-    def get_covariance(self, covariance):
-        assert np.shape(covariance) == (self.n_residuals, self.n_residuals)
-        covariance[:,:] = np.diag(np.reciprocal(self.var))
+    def get_covariance_inv(self, covariance_inv):
+        assert np.shape(covariance_inv) == (self.n_residuals, self.n_residuals)
+        covariance_inv[:,:] = np.diag(np.reciprocal(self.var))
         return True
