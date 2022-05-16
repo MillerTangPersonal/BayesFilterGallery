@@ -133,13 +133,14 @@ for t_idx in range(t_start, t_final-kappa+1):
         # if not the first window
         prior_v = Pose3(vertices[0].data) # the second vertex from previous graph is the prior   
         prior_vertex = Vertex.create(vertex_id_counter, prior_v)
-        if (np.all((prior_vertex.var== 0))): # if no covariance was calculated for the prior vertex
+        if (np.all((prior_vertex.var == 0))): # if no covariance was calculated for the prior vertex
             prior_vertex.var = 0.0001*np.ones(6, dtype=float) # a small cov to avoid error (~1cm uncertainty)
         else:
-            prior_vertex.set_cov(vertices[1].var)
+            prior_vertex.set_cov(vertices[0].var)
         graph.add_vertex(prior_vertex)
         
         # # the prior is the first vertex within the window vertices
+        # # the following three lines are equivalent to the above
         # prior_vertex = vertices[0]
         # prior_vertex.id = vertex_id_counter
         # graph.add_vertex(prior_vertex)
