@@ -82,16 +82,16 @@ for t_idx in range(t_start, t_final-kappa+1):
         prior_cov_init = np.diag(0.00001*np.ones(6, dtype=float)) # 1e-5 -> ~3 mm uncertainty for vicon
         prior_vertex.var = prior_cov_init
         # add prior vertex to graph
-        graph.add_vertex(prior_vertex)
-                
+        graph.add_vertex(prior_vertex)   
         # store for future analysis
         vertices.append(prior_vertex)
-        vertex_id_counter += 1
 
         # prior factor
         prior_factor = SE3PriorFactor(prior_vertex, prior_vertex.var)
         graph.add_factor(vertex_id_counter, prior_factor)
 
+        vertex_id_counter += 1
+        
         # add motion model
         t_prev = time_stamps[t_idx]
         prev_vertex = prior_vertex
